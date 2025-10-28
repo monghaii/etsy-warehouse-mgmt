@@ -94,6 +94,8 @@ export default function ShippingSettingsPage() {
             </h1>
             <p className="text-gray-600 mt-2">
               Configure your ship-from address for purchasing shipping labels.
+              The company name will automatically use the store name from each
+              order.
             </p>
           </div>
 
@@ -113,37 +115,37 @@ export default function ShippingSettingsPage() {
             {/* Name */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Contact Name <span className="text-red-500">*</span>
+                Contact Name (optional)
               </label>
               <input
                 type="text"
-                value={settings.ship_from_name}
+                value={settings.ship_from_name || ""}
                 onChange={(e) =>
                   setSettings({ ...settings, ship_from_name: e.target.value })
                 }
                 placeholder="John Doe"
-                required
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
+              <p className="text-xs text-gray-500 mt-1">
+                Leave blank if shipping from company only
+              </p>
             </div>
 
             {/* Company */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Company Name (optional)
+                Company Name
               </label>
               <input
                 type="text"
-                value={settings.ship_from_company || ""}
-                onChange={(e) =>
-                  setSettings({
-                    ...settings,
-                    ship_from_company: e.target.value,
-                  })
-                }
-                placeholder="My Store LLC"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                value="Auto-populated from store name"
+                disabled
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-500 cursor-not-allowed"
               />
+              <p className="text-xs text-gray-500 mt-1">
+                The company name will automatically use the store name from each
+                order
+              </p>
             </div>
 
             {/* Address Line 1 */}
@@ -263,7 +265,7 @@ export default function ShippingSettingsPage() {
             {/* Phone */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Phone Number (optional)
+                Phone Number <span className="text-red-500">*</span>
               </label>
               <input
                 type="tel"
@@ -272,6 +274,7 @@ export default function ShippingSettingsPage() {
                   setSettings({ ...settings, ship_from_phone: e.target.value })
                 }
                 placeholder="(555) 123-4567"
+                required
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
@@ -302,4 +305,3 @@ export default function ShippingSettingsPage() {
     </div>
   );
 }
-

@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import Navigation from "@/components/Navigation";
 import Link from "next/link";
 import { supabaseAdmin } from "@/lib/supabase-server";
+import OrderStatusChart from "@/components/OrderStatusChart";
 
 async function getUser() {
   const cookieStore = await cookies();
@@ -44,13 +45,6 @@ async function getUser() {
 export default async function DashboardPage() {
   const user = await getUser();
 
-  const stats = [
-    { label: "Total Orders", value: "0", icon: "📦" },
-    { label: "Pending", value: "0", icon: "⏳" },
-    { label: "In Production", value: "0", icon: "🏭" },
-    { label: "Late Orders", value: "0", icon: "⚠️" },
-  ];
-
   const quickActions = [
     {
       href: "/orders",
@@ -80,7 +74,7 @@ export default async function DashboardPage() {
             href: "/shipping",
             icon: "📮",
             label: "Shipping",
-            description: "Generate labels",
+            description: "Load for shipment",
           },
         ]
       : []),
@@ -98,23 +92,8 @@ export default async function DashboardPage() {
           </p>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          {stats.map((stat) => (
-            <div
-              key={stat.label}
-              className="p-6 rounded-lg bg-white border border-gray-300"
-            >
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-2xl">{stat.icon}</span>
-                <span className="text-3xl font-bold text-gray-900">
-                  {stat.value}
-                </span>
-              </div>
-              <p className="text-sm text-gray-600">{stat.label}</p>
-            </div>
-          ))}
-        </div>
+        {/* Order Status Chart */}
+        <OrderStatusChart />
 
         {/* Quick Actions */}
         <div className="p-6 rounded-lg mb-8 bg-white border border-gray-300">

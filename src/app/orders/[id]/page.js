@@ -503,7 +503,7 @@ export default function OrderDetailPage() {
               order.raw_order_data?.customer_enrichment?.length > 0) && (
               <div className="bg-white rounded-lg border border-gray-300 p-6">
                 <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                  📝 Customer Enrichment
+                  📝 Customer Enrichment Form Data
                 </h2>
                 <div className="space-y-4">
                   {/* Header info */}

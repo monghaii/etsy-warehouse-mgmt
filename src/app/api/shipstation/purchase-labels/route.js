@@ -21,7 +21,9 @@ export async function POST(request) {
       );
     }
 
-    const apiKey = process.env.SHIPENGINE_API_KEY;
+    const apiKey = process.env.SHIPSTATION_API_KEY;
+    console.log("[Label Purchase] API Key present:", !!apiKey);
+    console.log("[Label Purchase] API Key length:", apiKey?.length || 0);
     if (!apiKey) {
       return NextResponse.json(
         { error: "ShipEngine API key not configured" },
@@ -58,14 +60,41 @@ export async function POST(request) {
       .single();
 
     if (!shippingSettings) {
+      console.error("[Label Purchase] No shipping settings found for user");
       return NextResponse.json(
         {
           error:
-            "Shipping settings not configured. Please set up your ship-from address in Settings > Shipping.",
+            "Ship-from address not configured. Please set up your shipping address in Settings → Shipping.",
         },
         { status: 400 }
       );
     }
+
+    // Validate required shipping settings
+    if (
+      !shippingSettings.ship_from_address_line1 ||
+      !shippingSettings.ship_from_city ||
+      !shippingSettings.ship_from_state ||
+      !shippingSettings.ship_from_zip ||
+      !shippingSettings.ship_from_phone
+    ) {
+      console.error("[Label Purchase] Incomplete shipping settings:", {
+        hasAddress: !!shippingSettings.ship_from_address_line1,
+        hasCity: !!shippingSettings.ship_from_city,
+        hasState: !!shippingSettings.ship_from_state,
+        hasZip: !!shippingSettings.ship_from_zip,
+        hasPhone: !!shippingSettings.ship_from_phone,
+      });
+      return NextResponse.json(
+        {
+          error:
+            "Incomplete ship-from address. Please complete all required fields in Settings → Shipping (Address, City, State, ZIP, Phone).",
+        },
+        { status: 400 }
+      );
+    }
+
+    console.log("[Label Purchase] Shipping settings validated successfully");
 
     const results = [];
     const errors = [];
@@ -82,6 +111,13 @@ export async function POST(request) {
           });
           continue;
         }
+
+        // Get store name for company field
+        const storeName =
+          order.stores?.store_name || order.store_name || "Store";
+        console.log(
+          `[Label Purchase] Order ${order.order_number} - Store: ${storeName}`
+        );
 
         // Get package details
         const transactions = order.raw_order_data?.transactions || [];
@@ -114,6 +150,55 @@ export async function POST(request) {
           height: maxHeight || 3,
         };
 
+        // Build the shipment request
+        const shipmentRequest = {
+          label_format: "pdf",
+          label_download_type: "url",
+          shipment: {
+            service_code: rate.serviceCode,
+            ship_to: {
+              name: order.customer_name || "Customer",
+              address_line1: order.shipping_address_line1,
+              address_line2: order.shipping_address_line2 || "",
+              city_locality: order.shipping_city,
+              state_province: order.shipping_state,
+              postal_code: order.shipping_zip,
+              country_code: order.shipping_country || "US",
+            },
+            ship_from: {
+              name: shippingSettings.ship_from_name || storeName,
+              company_name: storeName,
+              phone: shippingSettings.ship_from_phone,
+              address_line1: shippingSettings.ship_from_address_line1,
+              address_line2:
+                shippingSettings.ship_from_address_line2 || undefined,
+              city_locality: shippingSettings.ship_from_city,
+              state_province: shippingSettings.ship_from_state,
+              postal_code: shippingSettings.ship_from_zip,
+              country_code: shippingSettings.ship_from_country,
+            },
+            packages: [
+              {
+                weight: {
+                  value: packageWeight,
+                  unit: "ounce",
+                },
+                dimensions: {
+                  unit: "inch",
+                  length: packageDims.length,
+                  width: packageDims.width,
+                  height: packageDims.height,
+                },
+              },
+            ],
+          },
+        };
+
+        console.log(
+          `[Label Purchase] Sending request to ShipEngine for order ${order.order_number}:`,
+          JSON.stringify(shipmentRequest, null, 2)
+        );
+
         // Purchase label via ShipEngine
         const purchaseResponse = await fetch(
           "https://api.shipengine.com/v1/labels",
@@ -123,66 +208,34 @@ export async function POST(request) {
               "API-Key": apiKey,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({
-              label_format: "pdf",
-              label_download_type: "url",
-              shipment: {
-                service_code: rate.serviceCode,
-                ship_to: {
-                  name: order.customer_name || "Customer",
-                  address_line1: order.shipping_address_line1,
-                  address_line2: order.shipping_address_line2 || "",
-                  city_locality: order.shipping_city,
-                  state_province: order.shipping_state,
-                  postal_code: order.shipping_zip,
-                  country_code: order.shipping_country || "US",
-                },
-                ship_from: {
-                  name: shippingSettings.ship_from_name,
-                  company_name: shippingSettings.ship_from_company || undefined,
-                  phone: shippingSettings.ship_from_phone || undefined,
-                  address_line1: shippingSettings.ship_from_address_line1,
-                  address_line2: shippingSettings.ship_from_address_line2 || undefined,
-                  city_locality: shippingSettings.ship_from_city,
-                  state_province: shippingSettings.ship_from_state,
-                  postal_code: shippingSettings.ship_from_zip,
-                  country_code: shippingSettings.ship_from_country,
-                },
-                packages: [
-                  {
-                    weight: {
-                      value: packageWeight,
-                      unit: "ounce",
-                    },
-                    dimensions: {
-                      unit: "inch",
-                      length: packageDims.length,
-                      width: packageDims.width,
-                      height: packageDims.height,
-                    },
-                  },
-                ],
-              },
-            }),
+            body: JSON.stringify(shipmentRequest),
           }
         );
 
         if (!purchaseResponse.ok) {
           const errorData = await purchaseResponse.json();
+          console.error(
+            `[Label Purchase] ShipEngine error for order ${order.order_number}:`,
+            JSON.stringify(errorData, null, 2)
+          );
           errors.push({
             orderId: order.id,
             orderNumber: order.order_number,
-            error: errorData.message || "Label purchase failed",
+            error:
+              errorData.message ||
+              errorData.errors?.[0]?.message ||
+              "Label purchase failed",
           });
           continue;
         }
 
         const labelData = await purchaseResponse.json();
 
-        // Update order in database with tracking number and label URL
+        // Update order in database with tracking number, label URL, and status
         const { error: updateError } = await supabaseAdmin
           .from("orders")
           .update({
+            status: "labels_generated",
             tracking_number: labelData.tracking_number,
             label_url: labelData.label_download.href,
           })

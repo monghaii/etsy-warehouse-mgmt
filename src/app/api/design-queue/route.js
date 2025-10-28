@@ -24,9 +24,18 @@ export async function GET() {
       );
     }
 
+    // Sort orders: revision orders first, then by date
+    const sortedOrders = [...(orders || [])].sort((a, b) => {
+      // Revision orders always come first
+      if (a.needs_design_revision && !b.needs_design_revision) return -1;
+      if (!a.needs_design_revision && b.needs_design_revision) return 1;
+      // Otherwise sort by date (newest first)
+      return new Date(b.order_date) - new Date(a.order_date);
+    });
+
     // For each order, enrich transactions with product config (Canva template URL)
     const enrichedOrders = await Promise.all(
-      orders.map(async (order) => {
+      sortedOrders.map(async (order) => {
         const transactions = order.raw_order_data?.transactions || [];
 
         // Fetch product configs for all SKUs in this order

@@ -284,11 +284,11 @@ export default function DesignQueuePage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between mb-8">
+      <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Design Queue</h1>
-            <p className="text-gray-600 mt-2">
+            <h1 className="text-2xl font-bold text-gray-900">Design Queue</h1>
+            <p className="text-gray-600 text-sm mt-1">
               {orders.length} {orders.length === 1 ? "order" : "orders"} ready
               for design
             </p>
@@ -337,7 +337,7 @@ export default function DesignQueuePage() {
             </Link>
           </div>
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-4">
             {orders.map((order) => {
               const transactions = order.raw_order_data?.transactions || [];
               const allDesignsUploaded = transactions.every((txn) =>
@@ -347,53 +347,80 @@ export default function DesignQueuePage() {
               );
 
               const isDesignComplete = order.status === "design_complete";
+              const needsRevision = order.needs_design_revision;
+              const isLocked = order.production_started_at;
 
               return (
                 <div
                   key={order.id}
-                  className={`rounded-lg border p-6 ${
-                    isDesignComplete
+                  className={`rounded-lg border p-4 ${
+                    needsRevision
+                      ? "bg-red-50 border-red-300"
+                      : isDesignComplete
                       ? "bg-green-50 border-green-200"
                       : "bg-white border-gray-300"
                   }`}
                 >
-                  <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-start justify-between mb-3">
                     <div className="flex-1">
-                      <div className="flex items-center gap-3">
-                        <h3 className="text-lg font-semibold text-gray-900">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-base font-semibold text-gray-900">
                           Order #{order.order_number}
                         </h3>
                         <a
                           href={`https://www.etsy.com/your/orders/sold?order_id=${order.order_number}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 px-3 py-1 bg-orange-500 text-white text-sm font-medium rounded hover:bg-orange-600 transition-colors"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-500 text-white text-xs font-medium rounded hover:bg-orange-600 transition-colors"
                         >
                           Etsy ↗
                         </a>
                       </div>
-                      <p className="text-sm text-gray-600 mt-1">
+                      <p className="text-xs text-gray-600 mt-0.5">
                         {order.customer_name} •{" "}
                         {new Date(order.order_date).toLocaleDateString()}
                       </p>
-                      <div className="mt-2 flex gap-2">
+                      {needsRevision && order.design_revision_notes && (
+                        <div className="mt-1.5 p-2 bg-red-100 border border-red-200 rounded">
+                          <p className="text-xs font-medium text-red-900 mb-0.5">
+                            🔄 Revision Requested:
+                          </p>
+                          <p className="text-xs text-red-800">
+                            {order.design_revision_notes}
+                          </p>
+                        </div>
+                      )}
+                      {isLocked && (
+                        <div className="mt-1.5 p-1.5 bg-yellow-100 border border-yellow-200 rounded">
+                          <p className="text-xs text-yellow-900">
+                            🔒 Production started - design is locked and cannot
+                            be replaced
+                          </p>
+                        </div>
+                      )}
+                      <div className="mt-1.5 flex gap-1.5">
+                        {needsRevision && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-300">
+                            🔄 NEEDS REVISION
+                          </span>
+                        )}
                         {isDesignComplete && (
-                          <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                             ✓ Design Complete
                           </span>
                         )}
                         {allDesignsUploaded && !isDesignComplete && (
-                          <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                             ✓ All Designs Uploaded
                           </span>
                         )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
                       <button
                         onClick={() => generateMetadataImage(order.id)}
                         disabled={generatingMetadata === order.id}
-                        className={`px-3 py-2 rounded text-sm font-medium ${
+                        className={`px-2 py-1 rounded text-xs font-medium ${
                           generatingMetadata === order.id
                             ? "bg-gray-100 text-gray-400 cursor-not-allowed"
                             : "bg-green-600 text-white hover:bg-green-700"
@@ -402,13 +429,13 @@ export default function DesignQueuePage() {
                       >
                         {generatingMetadata === order.id
                           ? "📋 Generating..."
-                          : "📋 Copy Label"}
+                          : "📋 Copy ID Tag"}
                       </button>
                       {allDesignsUploaded && !isDesignComplete && (
                         <button
                           onClick={() => confirmForProduction(order.id)}
                           disabled={confirmingOrder === order.id}
-                          className={`px-4 py-2 rounded font-medium ${
+                          className={`px-3 py-1 rounded text-xs font-medium ${
                             confirmingOrder === order.id
                               ? "bg-gray-100 text-gray-400 cursor-not-allowed"
                               : "bg-blue-600 text-white hover:bg-blue-700"
@@ -420,13 +447,13 @@ export default function DesignQueuePage() {
                         </button>
                       )}
                       {isDesignComplete && (
-                        <span className="text-sm text-green-700 font-medium">
+                        <span className="text-xs text-green-700 font-medium">
                           In Production
                         </span>
                       )}
                       <Link
                         href={`/orders/${order.id}`}
-                        className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                        className="text-blue-600 hover:text-blue-700 text-xs font-medium"
                       >
                         View Details →
                       </Link>
@@ -435,12 +462,12 @@ export default function DesignQueuePage() {
 
                   {/* Internal Notes */}
                   {order.notes && (
-                    <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded">
+                    <div className="mb-3 p-2 bg-gray-50 border border-gray-200 rounded">
                       <div className="flex items-start gap-2">
-                        <span className="font-medium text-gray-700">
+                        <span className="text-xs font-medium text-gray-700">
                           📋 Internal Notes:
                         </span>
-                        <div className="text-gray-600 flex-1 whitespace-pre-wrap">
+                        <div className="text-xs text-gray-600 flex-1 whitespace-pre-wrap">
                           {order.notes}
                         </div>
                       </div>
@@ -449,19 +476,19 @@ export default function DesignQueuePage() {
 
                   {/* Customer General Notes */}
                   {order.customer_notes && (
-                    <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded">
+                    <div className="mb-3 p-2 bg-blue-50 border border-blue-200 rounded">
                       <div className="flex items-start gap-2">
-                        <span className="font-medium text-blue-900">
+                        <span className="text-xs font-medium text-blue-900">
                           💬 Customer Notes:
                         </span>
-                        <div className="text-blue-800 flex-1 whitespace-pre-wrap">
+                        <div className="text-xs text-blue-800 flex-1 whitespace-pre-wrap">
                           {order.customer_notes}
                         </div>
                       </div>
                     </div>
                   )}
 
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     {transactions.map((txn, idx) => {
                       const transactionId = txn.transaction_id?.toString();
                       const isUploading =
@@ -473,6 +500,9 @@ export default function DesignQueuePage() {
                         (df) => df.transaction_id === transactionId
                       );
                       const hasDesign = !!designFile;
+
+                      // Check if uploads are locked (production started but not needing revision)
+                      const uploadsLocked = isLocked && !needsRevision;
 
                       // SKU is already enhanced in the database (e.g., BLKT-KPOP-001-30-40)
                       // Just display it with proper highlighting
@@ -486,14 +516,14 @@ export default function DesignQueuePage() {
                       return (
                         <div
                           key={transactionId || idx}
-                          className="border border-gray-200 rounded-lg p-4"
+                          className="border border-gray-200 rounded-lg p-3"
                         >
-                          <div className="flex items-start justify-between">
+                          <div className="flex items-start justify-between gap-4">
                             <div className="flex-1">
-                              <h4 className="font-medium text-gray-900">
+                              <h4 className="text-sm font-medium text-gray-900">
                                 {txn.title || "Unknown Product"}
                               </h4>
-                              <p className="text-sm text-gray-600">
+                              <p className="text-xs text-gray-600 mt-0.5">
                                 SKU: {baseSku}
                                 {appendedPart && (
                                   <span className="text-blue-600 font-medium">
@@ -512,11 +542,11 @@ export default function DesignQueuePage() {
                                 return personalization &&
                                   personalization !==
                                     "Not requested on this item" ? (
-                                  <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-sm">
+                                  <div className="mt-1.5 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
                                     <div className="font-medium text-yellow-900">
                                       📝 Etsy Personalization:
                                     </div>
-                                    <div className="text-yellow-800 mt-1 whitespace-pre-wrap">
+                                    <div className="text-yellow-800 mt-0.5 whitespace-pre-wrap">
                                       {personalization}
                                     </div>
                                   </div>
@@ -527,54 +557,62 @@ export default function DesignQueuePage() {
                               {(() => {
                                 const enrichment =
                                   order.raw_order_data?.customer_enrichment?.find(
-                                    (e) => e.transaction_id === transactionId
+                                    (e) =>
+                                      e.transactionId?.toString() ===
+                                      transactionId
                                   );
-                                return enrichment ? (
-                                  <div className="mt-2 p-2 bg-purple-50 border border-purple-200 rounded text-sm">
+                                return enrichment &&
+                                  (enrichment.customText ||
+                                    enrichment.uploadedFiles?.length > 0) ? (
+                                  <div className="mt-1.5 p-2 bg-purple-50 border border-purple-200 rounded text-xs">
                                     <div className="font-medium text-purple-900">
-                                      ✨ Customer Upload:
+                                      ✨ Customer Enrichment:
                                     </div>
-                                    {enrichment.custom_text && (
-                                      <div className="text-purple-800 mt-1">
-                                        {enrichment.custom_text}
+                                    {enrichment.customText && (
+                                      <div className="text-purple-800 mt-0.5 whitespace-pre-wrap">
+                                        {enrichment.customText}
                                       </div>
                                     )}
-                                    {enrichment.file_url && (
-                                      <a
-                                        href={enrichment.file_url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-purple-600 hover:text-purple-700 font-medium"
-                                      >
-                                        View File ↗
-                                      </a>
-                                    )}
+                                    {enrichment.uploadedFiles &&
+                                      enrichment.uploadedFiles.length > 0 && (
+                                        <div className="mt-1 space-y-1">
+                                          <div className="font-medium text-purple-900">
+                                            Uploaded Files:
+                                          </div>
+                                          {enrichment.uploadedFiles.map(
+                                            (file, idx) => {
+                                              // Get public URL for the file
+                                              const supabaseUrl =
+                                                process.env
+                                                  .NEXT_PUBLIC_SUPABASE_URL;
+                                              const fileUrl = `${supabaseUrl}/storage/v1/object/public/customer-uploads/${file.filePath}`;
+                                              return (
+                                                <a
+                                                  key={idx}
+                                                  href={fileUrl}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  className="block text-purple-600 hover:text-purple-700 font-medium"
+                                                >
+                                                  📎 {file.fileName} ↗
+                                                </a>
+                                              );
+                                            }
+                                          )}
+                                        </div>
+                                      )}
                                   </div>
                                 ) : null;
                               })()}
 
-                              {/* Canva Template Link */}
-                              {txn.canva_template_url && (
-                                <div className="mt-2">
-                                  <a
-                                    href={txn.canva_template_url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded hover:bg-purple-700 transition-colors"
-                                  >
-                                    🎨 Open Canva Template ↗
-                                  </a>
-                                </div>
-                              )}
-
                               {/* Design Preview Link */}
                               {hasDesign && designFile.file_url && (
-                                <div className="mt-2">
+                                <div className="mt-1.5">
                                   <a
                                     href={designFile.file_url}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 font-medium"
+                                    className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium"
                                   >
                                     📄 Preview Design PDF ↗
                                   </a>
@@ -582,41 +620,48 @@ export default function DesignQueuePage() {
                               )}
                             </div>
 
-                            <div className="ml-4">
-                              {hasDesign ? (
+                            <div className="flex flex-col gap-2 items-end">
+                              {/* Canva Template Link - Above Upload Button */}
+                              {txn.canva_template_url && (
+                                <a
+                                  href={txn.canva_template_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-xs font-medium rounded hover:bg-purple-700 transition-colors whitespace-nowrap"
+                                >
+                                  🎨 Open Canva Template ↗
+                                </a>
+                              )}
+
+                              {/* Upload/Replace Button */}
+                              {uploadsLocked ? (
                                 <div className="flex items-center gap-2">
-                                  <span className="text-green-600 text-sm font-medium">
+                                  {hasDesign && (
+                                    <span className="text-green-600 text-xs font-medium">
+                                      ✓ Design Uploaded
+                                    </span>
+                                  )}
+                                  <span className="text-gray-500 text-xs">
+                                    🔒 Locked
+                                  </span>
+                                </div>
+                              ) : hasDesign ? (
+                                <div className="flex items-center gap-2">
+                                  <span className="text-green-600 text-xs font-medium">
                                     ✓ Design Uploaded
                                   </span>
-                                  <label className="cursor-pointer text-blue-600 hover:text-blue-700 text-sm">
+                                  <label className="cursor-pointer text-blue-600 hover:text-blue-700 text-xs">
                                     Replace
                                     <input
                                       type="file"
                                       accept=".pdf"
                                       onChange={(e) => {
-                                        console.log(
-                                          "Replace file selected:",
-                                          e.target.files
-                                        );
                                         const file = e.target.files?.[0];
                                         if (file) {
-                                          console.log(
-                                            "Calling handleFileUpload for Replace:",
-                                            {
-                                              orderId: order.id,
-                                              transactionId,
-                                              fileName: file.name,
-                                              fileSize: file.size,
-                                            }
-                                          );
                                           handleFileUpload(
                                             order.id,
                                             transactionId,
                                             file
-                                          );
-                                        } else {
-                                          console.log(
-                                            "No file selected for Replace"
                                           );
                                         }
                                       }}
@@ -627,7 +672,7 @@ export default function DesignQueuePage() {
                                 </div>
                               ) : (
                                 <label
-                                  className={`inline-flex items-center gap-2 px-4 py-2 rounded font-medium cursor-pointer ${
+                                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium cursor-pointer whitespace-nowrap ${
                                     isUploading
                                       ? "bg-gray-100 text-gray-400 cursor-not-allowed"
                                       : "bg-blue-600 text-white hover:bg-blue-700"
@@ -636,7 +681,7 @@ export default function DesignQueuePage() {
                                   {isUploading ? (
                                     <>
                                       <svg
-                                        className="animate-spin h-4 w-4"
+                                        className="animate-spin h-3 w-3"
                                         xmlns="http://www.w3.org/2000/svg"
                                         fill="none"
                                         viewBox="0 0 24 24"

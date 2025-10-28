@@ -85,7 +85,6 @@ export async function POST(request) {
     const body = await request.json();
     const {
       ship_from_name,
-      ship_from_company,
       ship_from_address_line1,
       ship_from_address_line2,
       ship_from_city,
@@ -95,6 +94,20 @@ export async function POST(request) {
       ship_from_phone,
     } = body;
 
+    // Validate required fields
+    if (
+      !ship_from_address_line1 ||
+      !ship_from_city ||
+      !ship_from_state ||
+      !ship_from_zip ||
+      !ship_from_phone
+    ) {
+      return NextResponse.json(
+        { error: "Address, city, state, ZIP, and phone number are required" },
+        { status: 400 }
+      );
+    }
+
     // Upsert (insert or update)
     const { data, error } = await supabaseAdmin
       .from("shipping_settings")
@@ -102,7 +115,7 @@ export async function POST(request) {
         {
           user_id: session.user.id,
           ship_from_name,
-          ship_from_company,
+          ship_from_company: null, // Company name will come from store
           ship_from_address_line1,
           ship_from_address_line2,
           ship_from_city,
@@ -136,4 +149,3 @@ export async function POST(request) {
     );
   }
 }
-

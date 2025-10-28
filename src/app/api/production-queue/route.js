@@ -3,16 +3,21 @@ import { supabaseAdmin } from "@/lib/supabase-server";
 
 /**
  * GET /api/production-queue
- * Fetch orders with design_complete or pending_fulfillment status
+ * Fetch orders with design_complete, in_production, labels_generated, or pending_fulfillment status
  * and enrich with product template data (dimensions, weight)
  */
 export async function GET() {
   try {
-    // Fetch orders that are design_complete or pending_fulfillment
+    // Fetch orders that are in production workflow
     const { data: orders, error } = await supabaseAdmin
       .from("orders")
       .select("*, stores(store_name)")
-      .in("status", ["design_complete", "pending_fulfillment"])
+      .in("status", [
+        "design_complete",
+        "in_production",
+        "labels_generated",
+        "pending_fulfillment",
+      ])
       .order("order_date", { ascending: false })
       .limit(100);
 

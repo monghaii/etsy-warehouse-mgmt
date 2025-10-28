@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
-import { enhanceSKUWithDimensions } from "@/lib/etsy-client";
 
 export async function POST(request) {
   try {
@@ -75,22 +74,20 @@ export async function POST(request) {
     let allNoEnrichment = true;
 
     for (const transaction of transactions) {
-      // Enhance SKU with dimensions from variations
-      const baseSku = transaction.sku || "";
-      const variations = transaction.variations || [];
-      const enhancedSku = enhanceSKUWithDimensions(baseSku, variations);
+      // SKU is already enhanced when the order was synced, so use it directly
+      const sku = transaction.sku || "";
 
       const { data: product, error: productError } = await supabaseAdmin
         .from("product_templates")
         .select(
           "sku, product_name, personalization_type, personalization_notes"
         )
-        .eq("sku", enhancedSku)
+        .eq("sku", sku)
         .single();
 
       const itemConfig = {
         transactionId: transaction.transaction_id,
-        sku: enhancedSku,
+        sku: sku,
         productName: transaction.title || "Unknown Product",
         quantity: transaction.quantity || 1,
         personalizationType: product?.personalization_type || "both",

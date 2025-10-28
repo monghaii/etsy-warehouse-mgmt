@@ -6,7 +6,6 @@ import Link from "next/link";
 export default function ProductionPage() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [startingOrder, setStartingOrder] = useState(null);
   const [actionStatus, setActionStatus] = useState(null);
   const [scanningMode, setScanningMode] = useState(false);
   const [scannedOrder, setScannedOrder] = useState(null);
@@ -40,6 +39,10 @@ export default function ProductionPage() {
   const [purchasingLabels, setPurchasingLabels] = useState(false);
   const [combineLabels, setCombineLabels] = useState(true);
   const [validatingAddresses, setValidatingAddresses] = useState(false);
+  const [showRevisionModal, setShowRevisionModal] = useState(false);
+  const [revisionOrder, setRevisionOrder] = useState(null);
+  const [revisionNotes, setRevisionNotes] = useState("");
+  const [requestingRevision, setRequestingRevision] = useState(false);
 
   useEffect(() => {
     loadOrders();
@@ -161,6 +164,76 @@ export default function ProductionPage() {
       console.error("Failed to load production queue:", error);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function startProduction(orderId) {
+    try {
+      const response = await fetch(`/api/orders/${orderId}/production`, {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.error || "Failed to start production";
+        throw new Error(errorMessage);
+      }
+
+      await loadOrders();
+      setActionStatus({
+        type: "success",
+        message: "✓ Production started!",
+      });
+      setTimeout(() => setActionStatus(null), 3000);
+    } catch (error) {
+      console.error("Failed to start production:", error);
+      setActionStatus({
+        type: "error",
+        message: `✗ ${error.message}`,
+      });
+      setTimeout(() => setActionStatus(null), 5000);
+    }
+  }
+
+  async function handleRequestRevision() {
+    if (!revisionOrder) return;
+
+    setRequestingRevision(true);
+    try {
+      const response = await fetch(
+        `/api/orders/${revisionOrder.id}/production`,
+        {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            revision_notes: revisionNotes,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to request design revision");
+      }
+
+      setShowRevisionModal(false);
+      setRevisionOrder(null);
+      setRevisionNotes("");
+      await loadOrders();
+      setActionStatus({
+        type: "success",
+        message:
+          "✓ Design revision requested - order sent back to design queue",
+      });
+      setTimeout(() => setActionStatus(null), 5000);
+    } catch (error) {
+      console.error("Failed to request design revision:", error);
+      setActionStatus({
+        type: "error",
+        message: "✗ Failed to request design revision",
+      });
+      setTimeout(() => setActionStatus(null), 3000);
+    } finally {
+      setRequestingRevision(false);
     }
   }
 
@@ -334,42 +407,6 @@ export default function ProductionPage() {
       });
     } finally {
       setLoadingRates(false);
-    }
-  }
-
-  async function startProduction(orderId) {
-    try {
-      setStartingOrder(orderId);
-      setActionStatus({
-        type: "info",
-        message: "Starting production...",
-      });
-
-      const response = await fetch(`/api/orders/${orderId}/status`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "in_production" }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to start production");
-      }
-
-      setActionStatus({
-        type: "success",
-        message: "✓ Production started!",
-      });
-
-      loadOrders();
-      setTimeout(() => setActionStatus(null), 3000);
-    } catch (error) {
-      console.error("Start production error:", error);
-      setActionStatus({
-        type: "error",
-        message: "Failed to start production. Please try again.",
-      });
-    } finally {
-      setStartingOrder(null);
     }
   }
 
@@ -1092,7 +1129,7 @@ export default function ProductionPage() {
                     htmlFor="label-sku-filter"
                     className="block text-sm font-medium text-gray-700 mb-2"
                   >
-                    🏷️ Purchase & Download Shipping Labels
+                    🏷️ Purchase Shipping Labels
                   </label>
                   <div className="flex gap-2">
                     <select
@@ -1143,27 +1180,88 @@ export default function ProductionPage() {
                       📮 Purchase Labels
                     </button>
                   </div>
-                  <div className="mt-3 flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id="combine-labels"
-                      checked={combineLabels}
-                      onChange={(e) => setCombineLabels(e.target.checked)}
-                      className="w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
-                    />
-                    <label
-                      htmlFor="combine-labels"
-                      className="text-sm text-gray-700 cursor-pointer"
-                    >
-                      Combine all shipping labels into a single PDF file
-                    </label>
-                  </div>
                   <p className="mt-2 text-xs text-gray-500">
                     This will validate addresses, get cheapest USPS rates, and
                     purchase all labels in one flow.
                     {selectedOrders.size > 0 && (
                       <span className="block mt-1 text-blue-600 font-medium">
                         🔍 Filtering: Will process {selectedOrders.size}{" "}
+                        selected orders.
+                      </span>
+                    )}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Download Shipping Labels Tool */}
+          {orders.length > 0 && (
+            <div className="bg-white rounded-lg border border-gray-300 p-6">
+              <div className="flex items-center gap-4">
+                <div className="flex-1">
+                  <label
+                    htmlFor="download-label-sku-filter"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
+                    📥 Download Shipping Labels
+                  </label>
+                  <div className="flex gap-2">
+                    <select
+                      id="download-label-sku-filter"
+                      value={labelSkuFilter}
+                      onChange={(e) => setLabelSkuFilter(e.target.value)}
+                      className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                    >
+                      <option value="">Select a SKU...</option>
+                      <option value="ALL" className="font-bold bg-blue-50">
+                        ALL SKUS (
+                        {selectedOrders.size > 0
+                          ? `${selectedOrders.size} selected orders`
+                          : `${orders.length} orders`}
+                        )
+                      </option>
+                      {getUniqueSKUs().map((sku) => (
+                        <option key={sku} value={sku}>
+                          {sku}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() => {
+                        // TODO: Implement download labels logic
+                        alert("Download labels functionality coming soon!");
+                      }}
+                      disabled={!labelSkuFilter.trim() || orders.length === 0}
+                      className={`px-6 py-2 rounded-lg font-medium transition-colors whitespace-nowrap ${
+                        !labelSkuFilter.trim() || orders.length === 0
+                          ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                          : "bg-blue-600 text-white hover:bg-blue-700"
+                      }`}
+                    >
+                      📥 Download Labels
+                    </button>
+                  </div>
+                  <div className="mt-3 flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="combine-labels-download"
+                      checked={combineLabels}
+                      onChange={(e) => setCombineLabels(e.target.checked)}
+                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                    <label
+                      htmlFor="combine-labels-download"
+                      className="text-sm text-gray-700 cursor-pointer"
+                    >
+                      Combine all shipping labels into a single PDF file
+                    </label>
+                  </div>
+                  <p className="mt-2 text-xs text-gray-500">
+                    Download previously purchased shipping labels.
+                    {selectedOrders.size > 0 && (
+                      <span className="block mt-1 text-blue-600 font-medium">
+                        🔍 Filtering: Will download {selectedOrders.size}{" "}
                         selected orders.
                       </span>
                     )}
@@ -1248,74 +1346,105 @@ export default function ProductionPage() {
                   }`}
                 >
                   {/* Compact Header */}
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2 flex-1">
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={(e) =>
-                          toggleSelectOrder(order.id, orderIndex, e.shiftKey)
-                        }
-                        onClick={(e) => e.stopPropagation()}
-                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
-                        title="Select order (Shift+click for range)"
-                      />
-                      <h3 className="text-sm font-semibold text-gray-900">
-                        Order #{order.order_number}
-                      </h3>
-                      <a
-                        href={`https://www.etsy.com/your/orders/sold?order_id=${order.order_number}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-500 text-white text-xs font-medium rounded hover:bg-orange-600 transition-colors"
-                      >
-                        Etsy ↗
-                      </a>
-                      <span className="text-xs text-gray-600">
-                        {order.customer_name}
-                      </span>
-                      <span className="text-xs text-gray-500">
-                        {new Date(order.order_date).toLocaleDateString()}
-                      </span>
-                      {order.tracking_number && (
-                        <span className="text-xs text-green-600 font-medium">
-                          📦 {order.tracking_number}
-                        </span>
-                      )}
-                      {order.label_url && (
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex flex-col gap-1 flex-1">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={(e) =>
+                            toggleSelectOrder(order.id, orderIndex, e.shiftKey)
+                          }
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+                          title="Select order (Shift+click for range)"
+                        />
+                        <h3 className="text-sm font-semibold text-gray-900">
+                          Order #{order.order_number}
+                        </h3>
                         <a
-                          href={order.label_url}
+                          href={`https://www.etsy.com/your/orders/sold?order_id=${order.order_number}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-500 text-white text-xs font-medium rounded hover:bg-blue-600 transition-colors"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-500 text-white text-xs font-medium rounded hover:bg-orange-600 transition-colors"
                         >
-                          📄 Label ↗
+                          Etsy ↗
                         </a>
+                        <span className="text-xs text-gray-600">
+                          {order.customer_name}
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          {new Date(order.order_date).toLocaleDateString()}
+                        </span>
+                      </div>
+                      {(order.tracking_number || order.label_url) && (
+                        <div className="flex items-center gap-2 ml-6">
+                          {order.tracking_number && (
+                            <span className="text-xs text-green-600 font-medium">
+                              📦 {order.tracking_number}
+                            </span>
+                          )}
+                          {order.label_url && (
+                            <a
+                              href={order.label_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-500 text-white text-xs font-medium rounded hover:bg-blue-600 transition-colors"
+                            >
+                              📄 Label ↗
+                            </a>
+                          )}
+                        </div>
                       )}
                     </div>
                     <div className="flex items-center gap-2">
+                      {/* Production Start/Revision Button */}
+                      {order.production_started_at ? (
+                        <button
+                          onClick={() => {
+                            setRevisionOrder(order);
+                            setShowRevisionModal(true);
+                          }}
+                          className="px-3 py-1 rounded text-xs font-medium bg-red-600 text-white hover:bg-red-700"
+                        >
+                          🔄 Request Design Revision
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => startProduction(order.id)}
+                          className="px-3 py-1 rounded text-xs font-medium bg-blue-600 text-white hover:bg-blue-700"
+                        >
+                          ▶️ Start Production
+                        </button>
+                      )}
+
                       {(() => {
                         const hasAddress =
                           order.shipping_address_line1 && order.shipping_zip;
+                        const productionStarted = order.production_started_at;
+                        const canGetQuote = hasAddress && productionStarted;
+
                         return (
                           <div className="relative group">
                             <button
                               onClick={() =>
-                                hasAddress && openShippingQuoteModal(order)
+                                canGetQuote && openShippingQuoteModal(order)
                               }
-                              disabled={!hasAddress}
+                              disabled={!canGetQuote}
                               className={`px-3 py-1 rounded text-xs font-medium ${
-                                hasAddress
+                                canGetQuote
                                   ? "bg-green-600 text-white hover:bg-green-700"
                                   : "bg-gray-300 text-gray-500 cursor-not-allowed"
                               }`}
                             >
                               📦 Get Shipping Quote
                             </button>
-                            {!hasAddress && (
+                            {!canGetQuote && (
                               <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block z-10">
                                 <div className="bg-gray-900 text-white text-xs rounded py-2 px-3 whitespace-nowrap">
-                                  Missing shipping address
+                                  {!hasAddress
+                                    ? "Missing shipping address"
+                                    : "Start production first"}
                                   <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
                                 </div>
                               </div>
@@ -2437,7 +2566,12 @@ export default function ProductionPage() {
                           );
 
                           if (!response.ok) {
-                            throw new Error("Failed to purchase labels");
+                            const errorData = await response
+                              .json()
+                              .catch(() => ({}));
+                            const errorMessage =
+                              errorData.error || "Failed to purchase labels";
+                            throw new Error(errorMessage);
                           }
 
                           const data = await response.json();
@@ -2490,6 +2624,78 @@ export default function ProductionPage() {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Design Revision Request Modal */}
+      {showRevisionModal && revisionOrder && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={() => {
+            if (!requestingRevision) {
+              setShowRevisionModal(false);
+              setRevisionOrder(null);
+              setRevisionNotes("");
+            }
+          }}
+        >
+          <div
+            className="bg-white rounded-lg max-w-2xl w-full p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-xl font-bold text-gray-900 mb-4">
+              Request Design Revision
+            </h2>
+
+            <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded">
+              <p className="text-sm text-yellow-900">
+                ⚠️ This will send order{" "}
+                <strong>#{revisionOrder.order_number}</strong> back to the
+                design queue. Designers will be able to make changes and
+                re-upload design files.
+              </p>
+            </div>
+
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Revision Notes (optional)
+              </label>
+              <textarea
+                value={revisionNotes}
+                onChange={(e) => setRevisionNotes(e.target.value)}
+                placeholder="Describe what needs to be changed..."
+                rows={4}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowRevisionModal(false);
+                  setRevisionOrder(null);
+                  setRevisionNotes("");
+                }}
+                disabled={requestingRevision}
+                className="flex-1 px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRequestRevision}
+                disabled={requestingRevision}
+                className={`flex-1 px-6 py-3 rounded-lg font-medium ${
+                  requestingRevision
+                    ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                    : "bg-red-600 text-white hover:bg-red-700"
+                }`}
+              >
+                {requestingRevision
+                  ? "Sending back to design..."
+                  : "Confirm - Request Revision"}
+              </button>
             </div>
           </div>
         </div>
