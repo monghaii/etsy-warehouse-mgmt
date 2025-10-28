@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
+import Navigation from "@/components/Navigation";
 
 export default function DesignQueuePage() {
   // Create Supabase client lazily to avoid SSR issues
@@ -13,6 +14,7 @@ export default function DesignQueuePage() {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
     );
   };
+  const [user, setUser] = useState(null);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploadingDesign, setUploadingDesign] = useState(null); // { orderId, transactionId }
@@ -22,8 +24,21 @@ export default function DesignQueuePage() {
   const [generatingMetadata, setGeneratingMetadata] = useState(null); // orderId
 
   useEffect(() => {
+    fetchUser();
     loadOrders();
   }, []);
+
+  async function fetchUser() {
+    try {
+      const response = await fetch("/api/auth/user");
+      if (response.ok) {
+        const data = await response.json();
+        setUser(data.user);
+      }
+    } catch (error) {
+      console.error("Failed to fetch user:", error);
+    }
+  }
 
   async function loadOrders() {
     try {
@@ -284,6 +299,8 @@ export default function DesignQueuePage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <Navigation user={user} />
+
       <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between mb-6">
           <div>

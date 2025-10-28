@@ -2,8 +2,10 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import Navigation from "@/components/Navigation";
 
 export default function ProductionPage() {
+  const [user, setUser] = useState(null);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [actionStatus, setActionStatus] = useState(null);
@@ -45,8 +47,21 @@ export default function ProductionPage() {
   const [requestingRevision, setRequestingRevision] = useState(false);
 
   useEffect(() => {
+    fetchUser();
     loadOrders();
   }, []);
+
+  async function fetchUser() {
+    try {
+      const response = await fetch("/api/auth/user");
+      if (response.ok) {
+        const data = await response.json();
+        setUser(data.user);
+      }
+    } catch (error) {
+      console.error("Failed to fetch user:", error);
+    }
+  }
 
   // Auto-validate addresses when modal opens at step 1
   useEffect(() => {
@@ -886,6 +901,8 @@ export default function ProductionPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <Navigation user={user} />
+
       <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between mb-8">
           <div>
