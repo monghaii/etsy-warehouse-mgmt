@@ -24,17 +24,18 @@ export async function GET(request) {
     );
 
     const {
-      data: { session },
-    } = await supabase.auth.getSession();
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
 
-    if (!session) {
+    if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const { data: settings, error } = await supabaseAdmin
       .from("shipping_settings")
       .select("*")
-      .eq("user_id", session.user.id)
+      .eq("user_id", user.id)
       .single();
 
     if (error && error.code !== "PGRST116") {
@@ -75,10 +76,11 @@ export async function POST(request) {
     );
 
     const {
-      data: { session },
-    } = await supabase.auth.getSession();
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
 
-    if (!session) {
+    if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -113,7 +115,7 @@ export async function POST(request) {
       .from("shipping_settings")
       .upsert(
         {
-          user_id: session.user.id,
+          user_id: user.id,
           ship_from_name,
           ship_from_company: null, // Company name will come from store
           ship_from_address_line1,

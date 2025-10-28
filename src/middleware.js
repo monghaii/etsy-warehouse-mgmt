@@ -74,11 +74,12 @@ export async function middleware(request) {
 
   // Check if user is authenticated
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
 
   // Redirect to login if not authenticated
-  if (!session) {
+  if (error || !user) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/login";
     redirectUrl.searchParams.set("redirectTo", pathname);

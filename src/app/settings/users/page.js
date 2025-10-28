@@ -21,10 +21,11 @@ async function getUser() {
   );
 
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
 
-  if (!session) {
+  if (error || !user) {
     redirect("/login");
   }
 
@@ -32,7 +33,7 @@ async function getUser() {
   const { data: profile } = await supabaseAdmin
     .from("users")
     .select("*")
-    .eq("id", session.user.id)
+    .eq("id", user.id)
     .single();
 
   if (profile?.role !== "admin") {
@@ -40,7 +41,7 @@ async function getUser() {
   }
 
   return {
-    ...session.user,
+    ...user,
     ...profile,
   };
 }
