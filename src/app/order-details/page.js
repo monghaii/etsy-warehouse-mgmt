@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 
-export default function EnrichmentForm() {
+export default function OrderDetailsForm() {
+  const searchParams = useSearchParams();
   const [step, setStep] = useState(1); // 1: lookup, 2: form, 3: success
   const [orderNumber, setOrderNumber] = useState("");
   const [lookupLoading, setLookupLoading] = useState(false);
@@ -17,6 +19,32 @@ export default function EnrichmentForm() {
 
   // Item-specific data: { transactionId: { customText: "", files: [] } }
   const [itemsData, setItemsData] = useState({});
+
+  // Auto-fill order number from query params
+  useEffect(() => {
+    const orderParam = searchParams.get("order");
+    if (orderParam) {
+      setOrderNumber(orderParam);
+    }
+  }, [searchParams]);
+
+  // Helper function to get last name initial
+  function getCustomerDisplayName(fullName) {
+    if (!fullName) return "";
+    const parts = fullName.trim().split(" ");
+    if (parts.length === 1) return parts[0];
+    const firstName = parts[0];
+    const lastInitial = parts[parts.length - 1][0];
+    return `${firstName} ${lastInitial}.`;
+  }
+
+  // Helper function to decode HTML entities
+  function decodeHtmlEntities(text) {
+    if (!text) return "";
+    const textarea = document.createElement("textarea");
+    textarea.innerHTML = text;
+    return textarea.value;
+  }
 
   async function handleLookup(e) {
     e.preventDefault();
@@ -51,7 +79,7 @@ export default function EnrichmentForm() {
 
       setStep(2);
     } catch (err) {
-      console.error("[Enrich] Lookup error:", err);
+      console.error("[Order Details] Lookup error:", err);
       setError("Failed to look up order. Please try again.");
     } finally {
       setLookupLoading(false);
@@ -104,7 +132,7 @@ export default function EnrichmentForm() {
       setSuccessMessage(data.message);
       setStep(3);
     } catch (err) {
-      console.error("[Enrich] Submit error:", err);
+      console.error("[Order Details] Submit error:", err);
       setError("Failed to submit. Please try again.");
     } finally {
       setSubmitLoading(false);
@@ -148,7 +176,7 @@ export default function EnrichmentForm() {
         {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-gray-900 mb-2">
-            Personalize Your Order
+            Complete Your Order
           </h1>
           <p className="text-gray-600">
             Enter your order details to customize your product
@@ -207,7 +235,7 @@ export default function EnrichmentForm() {
                 Order #{orderInfo.orderNumber}
               </h2>
               <p className="text-sm text-gray-600">
-                Customer: {orderInfo.customerName}
+                Customer: {getCustomerDisplayName(orderInfo.customerName)}
               </p>
               <p className="text-sm text-gray-600">
                 {orderInfo.items.length} item(s) in this order
@@ -269,7 +297,8 @@ export default function EnrichmentForm() {
                         </p>
                         {item.existingPersonalization && (
                           <p className="text-sm text-gray-600 mt-1 bg-white p-2 rounded border border-gray-200">
-                            From Etsy: {item.existingPersonalization}
+                            From Etsy:{" "}
+                            {decodeHtmlEntities(item.existingPersonalization)}
                           </p>
                         )}
                       </div>
@@ -297,7 +326,9 @@ export default function EnrichmentForm() {
                           {item.personalizationInstructions && (
                             <p className="text-sm text-gray-500 mb-3 bg-white p-3 rounded border border-gray-200">
                               <strong>Instructions:</strong>{" "}
-                              {item.personalizationInstructions}
+                              {decodeHtmlEntities(
+                                item.personalizationInstructions
+                              )}
                             </p>
                           )}
                           <textarea
