@@ -3,16 +3,24 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
-    "build": "next build --turbopack",
+    "dev": "next dev",
+    "build": "next build",
     "start": "next start"
   },
   "dependencies": {
     "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.76.1",
+    "busboy": "^1.6.0",
+    "bwip-js": "^4.7.0",
     "next": "15.5.6",
+    "pdf-lib": "^1.17.1",
+    "pdf-parse": "^1.1.1",
+    "pdf-to-png-converter": "^3.10.0",
+    "puppeteer": "^24.26.1",
     "react": "19.1.0",
-    "react-dom": "19.1.0"
+    "react-dom": "19.1.0",
+    "sharp": "^0.34.4",
+    "shipengine": "^1.0.7"
   },
   "devDependencies": {
     "autoprefixer": "^10.4.21",

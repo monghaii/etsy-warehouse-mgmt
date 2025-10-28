@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import Navigation from "@/components/Navigation";
+import { supabaseAdmin } from "@/lib/supabase-server";
 
 async function getUser() {
   const cookieStore = await cookies();
@@ -26,7 +27,8 @@ async function getUser() {
     redirect("/login");
   }
 
-  const { data: profile } = await supabase
+  // Use service role to fetch profile (bypasses RLS)
+  const { data: profile } = await supabaseAdmin
     .from("users")
     .select("*")
     .eq("id", session.user.id)
@@ -89,6 +91,24 @@ export default async function SettingsPage() {
                   </h3>
                   <p className="text-sm text-gray-500 mt-1">
                     Configure product templates and SKUs
+                  </p>
+                </div>
+              </div>
+            </a>
+
+            {/* Shipping */}
+            <a
+              href="/settings/shipping"
+              className="bg-white shadow rounded-lg p-6 hover:shadow-md transition-shadow"
+            >
+              <div className="flex items-center">
+                <div className="text-3xl mr-4">🚚</div>
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900">
+                    Shipping
+                  </h3>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Configure ship-from address for labels
                   </p>
                 </div>
               </div>

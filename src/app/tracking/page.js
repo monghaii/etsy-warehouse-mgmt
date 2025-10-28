@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import Navigation from "@/components/Navigation";
+import { supabaseAdmin } from "@/lib/supabase-server";
 
 async function getUser() {
   const cookieStore = await cookies();
@@ -26,7 +27,8 @@ async function getUser() {
     redirect("/login");
   }
 
-  const { data: profile } = await supabase
+  // Use service role to fetch profile (bypasses RLS)
+  const { data: profile } = await supabaseAdmin
     .from("users")
     .select("*")
     .eq("id", session.user.id)

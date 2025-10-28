@@ -1,0 +1,9 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/sync-orders",
+      "schedule": "*/15 * * * *"
+    }
+  ]
+}
+

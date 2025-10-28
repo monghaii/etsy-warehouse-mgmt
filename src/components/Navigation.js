@@ -58,7 +58,7 @@ export default function Navigation({ user }) {
               className="text-lg font-semibold"
               style={{ color: "var(--primary)" }}
             >
-              Etsy SaaS
+              Dingleberry
             </Link>
             <div className="flex gap-1">
               {visibleNavItems.map((item) => (

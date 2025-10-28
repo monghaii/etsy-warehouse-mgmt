@@ -365,57 +365,74 @@ Three ways to resolve flagged orders:
 
 ## 4.5 Design Generation & VA Workflow
 
-### Feature: Daily Canva Link Generation per Product
+### Feature: Persistent Canva Template per Product
 
-**User Story:** As a VA, I want one Canva link per product per day so I can efficiently create all designs for that product size in one file.
+**User Story:** As a VA, I want one persistent Canva template per product where I can create designs for all orders of that product type, then export and upload individual designs to specific order items.
 
 **Product Definition:**
 
-A "product" is defined by its **SIZE/DIMENSIONS**, not by custom design content:
+A "product" is defined by its **SIZE/DIMENSIONS and SKU**:
 
-- Example: "10x10 blanket" is ONE product
-- Example: "20x20 blanket" is a DIFFERENT product
-- Example: "30x40 pillow" is a DIFFERENT product
+- Example: "10x10 blanket" (SKU: BLKT-001) has ONE persistent Canva template
+- Example: "20x20 blanket" (SKU: BLKT-002) has a DIFFERENT Canva template
+- Example: "30x40 pillow" (SKU: PLLOW-001) has its OWN Canva template
 - Each product has a specific physical dimension (e.g., 10x10 inches)
 
-**Daily Canva File Structure:**
+**Canva Template Structure:**
 
-- **One Canva file per product per day**
-- Each Canva file contains ALL orders for that product size on that day
-- Each order becomes a separate page within the Canva file
-- Example: If 15 customers order 10x10 blankets today, they all go in ONE Canva file with 15 pages
+- **One persistent Canva template per product/SKU** (link configured in product settings)
+- Designer works in this single template file for all orders of that product type
+- Designer creates design pages as needed within the template
+- Designer exports individual pages/designs as images
+- Designer uploads the exported design directly to the specific order item
+- No automatic Canva file generation - fully manual designer workflow
 
 **Requirements:**
 
-- Automated daily job (runs at midnight) to generate Canva files
-- Group orders by product (size/dimensions) for the current day
-- Create one Canva file per product via Canva API
-- Each order = one page in the Canva file
-- Pre-populate each page with customer's custom text/images
-- Generate shareable Canva edit link
-- Store Canva link in `product_design_groups` table
-- VA dashboard showing:
-  - List of products needing design (grouped by size)
-  - Canva link for each product
-  - Number of orders (pages) in each file
-  - Checkbox to mark product as complete
-- Marking complete updates all orders for that product to `design_complete`
+- **Product Configuration:**
+
+  - Add Canva template URL field to product settings (`canva_template_id` already exists)
+  - Each product/SKU has one persistent Canva template link
+  - Template is manually created and managed by designer
+
+- **Design Queue Dashboard:**
+
+  - List all orders with status `ready_for_design`
+  - Group/filter by product/SKU
+  - Show Canva template link for each product
+  - Display order details (customer name, order #, personalization text/images)
+  - Ability to view customer-submitted assets inline
+
+- **Design Upload Interface:**
+
+  - Designer clicks "Upload Design" button on an order item
+  - File upload field (accepts PNG, JPG, PDF)
+  - Preview uploaded design
+  - Associate design file with specific order item (per transaction_id for multi-item orders)
+  - Store uploaded design in Supabase Storage
+  - Automatically update order status to `design_complete` when all items have designs
+
+- **Manual Workflow:**
+  1. Designer views orders in design queue
+  2. Designer opens relevant Canva template (one per product)
+  3. Designer creates design pages in Canva for multiple orders
+  4. Designer exports individual pages from Canva as images
+  5. Designer uploads exported designs to corresponding order items in the app
+  6. Order automatically advances to `design_complete`
 
 **Technical Notes:**
 
-- Canva API: Create multi-page design from template
-- One page per order within the product's Canva file
-- Store Canva design_id and edit_url in database
-- Link orders to their product's Canva file
-- **Cron job at 00:00 Pacific Time (America/Los_Angeles timezone)**
-- Handle API failures gracefully
+- No Canva API integration needed
+- No automated Canva file generation
+- No cron jobs for design workflow
+- Simple file upload and storage system
+- Designer has full control over workflow timing
 
 **Database Fields Needed:**
 
-- Product template mapping
-- Canva design_id and edit_url
-- Design completion status
-- VA assignment (future: track which VA worked on it)
+- `product_templates.canva_template_id` (already exists) - stores Canva template URL
+- `orders.design_files` (JSONB) - stores uploaded design file metadata per item
+- Or new `order_designs` table linking order items to design files
 
 ---
 
@@ -523,11 +540,13 @@ This image is placed in the **cut-out margins** of the design (non-visible area 
 
 ### Feature: Assemble Printing Roll
 
-**User Story:** As a warehouse user, I want to combine all designs from a product's daily Canva file into one optimized printing roll so I can print efficiently without wasting material.
+**User Story:** As a warehouse user, I want to combine all completed designs for a product into one optimized printing roll so I can print efficiently without wasting material.
 
 **Purpose:**
 
 Products come in various sizes (10x10", 20x20", 30x40", etc.) and need to be printed on a continuous roll of sublimation paper. This feature solves the **2D bin packing problem** to arrange all designs for one product onto a roll with minimal waste.
+
+**Design Source:** Completed designs uploaded by designer (stored in Supabase Storage).
 
 **Requirements:**
 
@@ -1015,42 +1034,48 @@ CREATE INDEX idx_orders_design_group ON orders(product_design_group_id);
 CREATE INDEX idx_orders_order_date ON orders(order_date);
 ```
 
-### 5.3 Table: `product_design_groups`
+### 5.3 Table: `order_designs` (Optional - for tracking design files)
 
-Daily Canva files per product. One Canva file per product per day containing all orders for that product.
+Stores uploaded design files for order items. Each order item can have one or more design files.
 
-**Note:** A "product" is defined by its size/dimensions (e.g., "10x10 blanket", "20x20 blanket"). Each product gets one Canva file per day with multiple pages (one page per order).
+**Note:** This table may not be necessary if storing design file metadata in `orders.design_files` JSONB field is sufficient.
 
 ```sql
-CREATE TABLE product_design_groups (
+-- Option 1: Store in orders table as JSONB
+-- Add column: design_files JSONB to orders table
+-- Example structure:
+-- {
+--   "items": [
+--     {
+--       "transaction_id": "123456",
+--       "design_url": "path/to/design.png",
+--       "uploaded_at": "2025-10-27T...",
+--       "uploaded_by": "user_id"
+--     }
+--   ]
+-- }
+
+-- Option 2: Separate table for tracking
+CREATE TABLE order_designs (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
 
-  product_sku VARCHAR(100) NOT NULL, -- Product identifier (e.g., "blanket-10x10")
-  design_date DATE NOT NULL, -- Date for this batch of designs
+  order_id UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  transaction_id VARCHAR(50), -- Specific item in multi-item orders
 
-  canva_design_id VARCHAR(255), -- Canva file ID
-  canva_edit_url TEXT, -- Shareable Canva edit link
-  canva_template_id VARCHAR(255), -- Template used to create design
+  design_file_path TEXT NOT NULL, -- Path in Supabase Storage
+  design_file_url TEXT, -- Public/signed URL
+  file_name VARCHAR(255),
+  file_size INTEGER,
+  file_type VARCHAR(50),
 
-  design_status VARCHAR(50) DEFAULT 'pending', -- 'pending', 'in_progress', 'complete'
-  assigned_to UUID, -- VA user_id
+  uploaded_by UUID REFERENCES users(id), -- Designer who uploaded
+  uploaded_at TIMESTAMP DEFAULT NOW(),
 
-  order_count INTEGER DEFAULT 0, -- How many orders (pages) in this Canva file
-
-  -- Print roll assembly
-  print_roll_generated BOOLEAN DEFAULT false,
-  print_roll_url TEXT,
-  print_roll_metadata JSONB, -- Roll dimensions, efficiency, layout
-
-  created_at TIMESTAMP DEFAULT NOW(),
-  completed_at TIMESTAMP,
-
-  CONSTRAINT unique_product_day UNIQUE(product_sku, design_date)
+  notes TEXT -- Optional designer notes
 );
 
-CREATE INDEX idx_design_groups_status ON product_design_groups(design_status);
-CREATE INDEX idx_design_groups_sku ON product_design_groups(product_sku);
-CREATE INDEX idx_design_groups_date ON product_design_groups(design_date);
+CREATE INDEX idx_order_designs_order ON order_designs(order_id);
+CREATE INDEX idx_order_designs_transaction ON order_designs(transaction_id);
 ```
 
 ### 5.4 Table: `users` (Profile Extension)
@@ -1470,18 +1495,21 @@ CREATE POLICY "Role-based file access"
 
 ### 7.5 Design
 
-- `/design-queue` - VA workflow dashboard
-  - List of products needing design (grouped by size)
-  - Canva links (one per product per day)
-  - Number of orders (pages) per product
-  - Mark as complete checkbox
-  - Filter by status and date
+- `/design-queue` - Designer workflow dashboard
+  - List all orders with status `ready_for_design`
+  - Group/filter by product/SKU
+  - Display Canva template link for each product (clickable, opens in new tab)
+  - Show order details: customer name, order #, personalization text
+  - View customer-submitted images/assets inline
+  - "Upload Design" button per order item
+  - Preview uploaded designs
+  - Filter by date, product, status
+  - Multi-item order support (upload separate design per item)
 - `/design-queue/metadata-images` - Generate metadata images
-  - Select product/date
-  - Generate metadata images for all orders in that product's Canva file
+  - Select orders with completed designs
+  - Generate metadata images with shipping info + barcode
   - Download individual or batch
   - Preview metadata images
-  - Shows order ID, ship-to info, barcode
 
 ### 7.6 Production
 
@@ -1562,45 +1590,43 @@ CREATE POLICY "Role-based file access"
    Status: pending_enrichment
    ↓
 3. Customer Submits Assets (/enrich form)
-   Status: enriched
+   Status: ready_for_design (auto-advanced if all requirements met)
    ↓
-4. Midnight Cron (Pacific Time): Generate Canva Links
-   Groups orders by product, creates multi-page Canva files
-   Status: ready_for_design
+4. Designer Opens Canva Template & Creates Designs
+   One persistent template per product, creates pages as needed
    ↓
-5. VA Opens Canva Link & Creates Designs
-   One Canva file per product, multiple pages per file
+5. Designer Exports & Uploads Designs
+   Exports individual pages from Canva
+   Uploads each design to corresponding order item in app
+   Order status automatically → design_complete
    ↓
-6. VA Generates Metadata Images
+6. Designer Generates Metadata Images (Optional)
    Downloads barcode labels for each order
-   Places in Canva design margins
+   Can be generated separately for production
    ↓
-7. VA Marks Product Complete
-   All orders for that product → design_complete
-   ↓
-8. Warehouse: Assemble Print Roll
+7. Warehouse: Assemble Print Roll
    Optimizes layout for all designs
    Prints roll on Epson printer
    ↓
-9. Warehouse: Scan Barcodes to Generate Labels
+8. Warehouse: Scan Barcodes to Generate Labels
    Scans each design's barcode
    Auto-generates & prints shipping label
    Staples label to design
    Status: labels_generated
    Etsy updated with tracking
    ↓
-10. Factory: Produces Products
-    Heat press, sewing, packaging
-    ↓
-11. Loader: Scans Packages for Shipment
+9. Factory: Produces Products
+   Heat press, sewing, packaging
+   ↓
+10. Loader: Scans Packages for Shipment
     Scans shipping label on each package
     Status: loaded_for_shipment
     Loads onto truck
     ↓
-12. ShipStation Webhook: Package Picked Up
+11. ShipStation Webhook: Package Picked Up
     Status: in_transit
     ↓
-13. ShipStation Webhook: Delivered
+12. ShipStation Webhook: Delivered
     Status: delivered
 ```
 
@@ -2102,53 +2128,56 @@ The architecture is designed to be platform-agnostic:
 - [x] Environment variables configuration ✅
 - [x] User roles system (admin, designer, warehouse) ✅
 
-### Phase 1: Order Ingestion
+### Phase 1: Order Ingestion ✅ COMPLETE
 
-- [ ] Etsy API integration
-- [ ] Store configuration page
-- [ ] Order polling cron job
-- [ ] Order list and detail pages
-- [ ] Status management
+- [x] Etsy API integration ✅
+- [x] Store configuration page ✅
+- [x] Order polling cron job ✅
+- [x] Order list and detail pages ✅
+- [x] Status management ✅
+
+### Phase 1.5: Product Configuration ✅ COMPLETE
+
+- [x] Database migration for personalization fields ✅
+- [x] Product templates API (CRUD operations) ✅
+- [x] Unconfigured SKUs detection API ✅
+- [x] Product configuration UI ✅
+- [x] Automatic SKU discovery from orders ✅
+- [x] Dynamic modal for configuring unconfigured products ✅
+- [x] Personalization type configuration (none/notes/image/both) ✅
 
 ### Phase 2: Enrichment
 
-- [ ] Public enrichment form
-- [ ] File upload to Supabase Storage
-- [ ] Order number validation
-- [ ] **Flag for review feature**
-  - [ ] "Flag for Review" UI in order detail
-  - [ ] Review reason dropdown
-  - [ ] Flagged orders dashboard (`/enrichment-review`)
-  - [ ] Resolution workflow (resubmit/manual fix/cancel)
-  - [ ] Asset replacement capability
-  - [ ] Status transitions (enriched ↔ needs_review)
+- [x] Public enrichment form
+- [x] File upload to Supabase Storage
+- [x] Order number validation
+- [x] **Flag for review feature**
+  - [x] "Flag for Review" UI in order detail
+  - [x] Review reason dropdown
+  - [x] Status transitions (ready for design ↔ needs_review)
 
 ### Phase 3: Design Workflow
 
-- [ ] Canva API integration
-- [ ] Product design grouping logic (by size, not design content)
-- [ ] Daily Canva link generation cron (midnight Pacific Time, one file per product per day)
-- [ ] Multi-page Canva file creation (one page per order)
-- [ ] VA design queue UI
-- [ ] Design completion tracking
-- [ ] **Metadata image generator**
-  - [ ] Barcode generation library integration
-  - [ ] Image composition (order info + barcode)
-  - [ ] Batch generation for product
-- [ ] Link orders to daily Canva files
+- [x] Design queue UI (list orders with status `ready_for_design`)
+- [x] Canva template URL configuration in product settings surfaced here
+- [x] Design file upload interface per order item
+- [x] Supabase Storage setup for design files
+- [ ] Design file preview and management, PDF only
+- [x] Automatic status advancement to `design_complete`
+- [x] Support for multi-item orders (upload design per transaction_id)
+- [x] **Metadata image generator**
+  - [x] Barcode generation library integration
+  - [x] Image composition (order info + barcode)
+  - [x] Batch generation for completed designs
 
 ### Phase 4: Production
 
-- [ ] Production queue UI
+- [x] Production queue UI
 - [ ] Package dimension management
-- [ ] Production tracking and notes
-- [ ] **Print roll assembly feature**
-  - [ ] 2D bin packing algorithm
-  - [ ] Canva page export (high-res images)
-  - [ ] Image composition into print roll
-  - [ ] Roll configuration UI
-  - [ ] Efficiency preview and download
-- [ ] Bulk production actions
+- [x] DL all designs
+- [x] DL all order details
+- [ ] DL order details from orders page and button instead of start on prod queue
+- [ ] remove start button in lookup pane
 
 ### Phase 5: Shipping
 
