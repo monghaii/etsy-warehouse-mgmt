@@ -34,7 +34,7 @@ export async function GET(request) {
     // Fetch orders in production queue
     let query = supabaseAdmin
       .from("orders")
-      .select("*, stores(store_name)")
+      .select("*, stores(store_name, shop_domain, platform)")
       .in("status", ["design_complete", "pending_fulfillment"])
       .order("order_date", { ascending: true });
 

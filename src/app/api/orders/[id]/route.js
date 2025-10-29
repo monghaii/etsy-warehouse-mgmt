@@ -14,7 +14,7 @@ export async function GET(request, { params }) {
 
     const { data: order, error } = await supabaseAdmin
       .from("orders")
-      .select("*, stores(store_name)")
+      .select("*, stores(store_name, shop_domain, platform)")
       .eq("id", id)
       .single();
 

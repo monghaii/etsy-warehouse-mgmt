@@ -1123,7 +1123,9 @@ export default function OrdersClient({ user }) {
                           <span className="text-gray-300">|</span>
                           {order.platform === "shopify" ? (
                             <a
-                              href={`https://${order.stores?.shop_domain}/admin/orders/${order.external_order_id}`}
+                              href={`https://admin.shopify.com/store/${
+                                order.stores?.shop_domain?.split(".")[0]
+                              }/orders/${order.external_order_id}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="px-2 py-1 bg-green-100 text-green-700 hover:bg-green-200 rounded font-medium"

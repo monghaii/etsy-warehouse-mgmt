@@ -11,7 +11,7 @@ export async function GET() {
     // Fetch orders that are in production workflow
     const { data: orders, error } = await supabaseAdmin
       .from("orders")
-      .select("*, stores(store_name)")
+      .select("*, stores(store_name, shop_domain, platform)")
       .in("status", [
         "design_complete",
         "in_production",

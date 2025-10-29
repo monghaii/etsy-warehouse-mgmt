@@ -11,7 +11,7 @@ export async function GET() {
   try {
     const { data: orders, error } = await supabaseAdmin
       .from("orders")
-      .select("*")
+      .select("*, stores(store_name, shop_domain, platform)")
       .eq("status", "loaded_for_shipment")
       .order("loaded_for_shipment_at", { ascending: false });
 

@@ -9,7 +9,7 @@ export async function GET() {
   try {
     const { data: orders, error } = await supabaseAdmin
       .from("orders")
-      .select("*")
+      .select("*, stores(store_name, shop_domain, platform)")
       .eq("status", "in_transit")
       .not("tracking_number", "is", null)
       .order("loaded_for_shipment_at", { ascending: false, nullsFirst: false })

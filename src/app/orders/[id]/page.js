@@ -843,7 +843,9 @@ export default function OrderDetailPage() {
                 <div>
                   {order.platform === "shopify" ? (
                     <a
-                      href={`https://${order.stores?.shop_domain}/admin/orders/${order.external_order_id}`}
+                      href={`https://admin.shopify.com/store/${
+                        order.stores?.shop_domain?.split(".")[0]
+                      }/orders/${order.external_order_id}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-sm text-blue-600 hover:text-blue-700"

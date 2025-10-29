@@ -11,7 +11,7 @@ export async function GET() {
     // (designers can edit design_complete orders until they go to production)
     const { data: orders, error } = await supabaseAdmin
       .from("orders")
-      .select("*")
+      .select("*, stores(store_name, shop_domain, platform)")
       .in("status", ["ready_for_design", "design_complete"])
       .order("order_date", { ascending: false })
       .limit(100);

@@ -16,7 +16,9 @@ export async function GET(request) {
 
     // For proper sorting with needs_review priority, we need to fetch ALL matching orders
     // then sort and paginate in JavaScript
-    let query = supabaseAdmin.from("orders").select("*, stores(store_name)");
+    let query = supabaseAdmin
+      .from("orders")
+      .select("*, stores(store_name, shop_domain, platform)");
 
     // Apply filters
     if (status && status !== "all") {
