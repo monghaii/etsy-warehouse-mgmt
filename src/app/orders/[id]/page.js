@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
 export default function OrderDetailPage() {
   const params = useParams();
+  const skuDropdownRef = useRef(null);
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -14,6 +15,9 @@ export default function OrderDetailPage() {
   const [changingStatus, setChangingStatus] = useState(false);
   const [editingSku, setEditingSku] = useState(false);
   const [sku, setSku] = useState("");
+  const [availableSkus, setAvailableSkus] = useState([]);
+  const [filteredSkus, setFilteredSkus] = useState([]);
+  const [showSkuDropdown, setShowSkuDropdown] = useState(false);
   const [showFlagModal, setShowFlagModal] = useState(false);
   const [flagReason, setFlagReason] = useState("");
 
@@ -22,6 +26,43 @@ export default function OrderDetailPage() {
       loadOrder();
     }
   }, [params.id]);
+
+  useEffect(() => {
+    if (editingSku) {
+      loadAvailableSkus();
+    }
+  }, [editingSku]);
+
+  useEffect(() => {
+    // Filter SKUs based on search input
+    if (sku) {
+      const filtered = availableSkus.filter((skuItem) =>
+        skuItem.sku.toLowerCase().includes(sku.toLowerCase())
+      );
+      setFilteredSkus(filtered);
+    } else {
+      setFilteredSkus(availableSkus);
+    }
+  }, [sku, availableSkus]);
+
+  useEffect(() => {
+    // Close dropdown when clicking outside
+    function handleClickOutside(event) {
+      if (
+        skuDropdownRef.current &&
+        !skuDropdownRef.current.contains(event.target)
+      ) {
+        setShowSkuDropdown(false);
+      }
+    }
+
+    if (showSkuDropdown) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => {
+        document.removeEventListener("mousedown", handleClickOutside);
+      };
+    }
+  }, [showSkuDropdown]);
 
   async function loadOrder() {
     try {
@@ -34,6 +75,17 @@ export default function OrderDetailPage() {
       console.error("Failed to load order:", error);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadAvailableSkus() {
+    try {
+      const response = await fetch("/api/products");
+      const data = await response.json();
+      setAvailableSkus(data.products || []);
+      setFilteredSkus(data.products || []);
+    } catch (error) {
+      console.error("Failed to load SKUs:", error);
     }
   }
 
@@ -135,7 +187,13 @@ export default function OrderDetailPage() {
 
     if (!numerals || numerals.length === 0) return baseSku;
 
-    return `${baseSku}-${numerals.join("-")}`;
+    // Check if dimensions are already in the SKU to avoid duplication
+    const dimensionSuffix = numerals.join("-");
+    if (baseSku.endsWith(`-${dimensionSuffix}`)) {
+      return baseSku; // Already has dimensions, don't append again
+    }
+
+    return `${baseSku}-${dimensionSuffix}`;
   }
 
   function renderSKU(enhancedSku, originalSku = null) {
@@ -282,7 +340,12 @@ export default function OrderDetailPage() {
                 <div>
                   <div className="text-sm text-gray-500">Buyer Name</div>
                   <div className="text-gray-900 font-medium">
-                    {order.raw_order_data?.receipt?.buyer_user_id
+                    {order.platform === "shopify" &&
+                    order.raw_order_data?.customer
+                      ? `${order.raw_order_data.customer.first_name || ""} ${
+                          order.raw_order_data.customer.last_name || ""
+                        }`.trim() || "—"
+                      : order.raw_order_data?.receipt?.buyer_user_id
                       ? `Etsy User ID: ${order.raw_order_data.receipt.buyer_user_id}`
                       : order.raw_order_data?.receipt?.name || "—"}
                   </div>
@@ -455,13 +518,42 @@ export default function OrderDetailPage() {
                     </div>
                     {editingSku ? (
                       <div className="flex gap-2 items-center">
-                        <input
-                          type="text"
-                          value={sku}
-                          onChange={(e) => setSku(e.target.value)}
-                          className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
-                          placeholder="Enter SKU"
-                        />
+                        <div className="flex-1 relative" ref={skuDropdownRef}>
+                          <input
+                            type="text"
+                            value={sku}
+                            onChange={(e) => {
+                              setSku(e.target.value);
+                              setShowSkuDropdown(true);
+                            }}
+                            onFocus={() => setShowSkuDropdown(true)}
+                            className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                            placeholder="Enter or search SKU"
+                          />
+                          {showSkuDropdown && filteredSkus.length > 0 && (
+                            <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-60 overflow-y-auto">
+                              {filteredSkus.map((skuItem) => (
+                                <button
+                                  key={skuItem.sku}
+                                  onClick={() => {
+                                    setSku(skuItem.sku);
+                                    setShowSkuDropdown(false);
+                                  }}
+                                  className="w-full text-left px-3 py-2 hover:bg-blue-50 border-b border-gray-100 last:border-b-0"
+                                >
+                                  <div className="text-sm font-medium text-gray-900">
+                                    {skuItem.sku}
+                                  </div>
+                                  {skuItem.product_name && (
+                                    <div className="text-xs text-gray-500">
+                                      {skuItem.product_name}
+                                    </div>
+                                  )}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                         <button
                           onClick={handleSaveSku}
                           className="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
@@ -472,6 +564,7 @@ export default function OrderDetailPage() {
                           onClick={() => {
                             setEditingSku(false);
                             setSku(order.product_sku || "");
+                            setShowSkuDropdown(false);
                           }}
                           className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs hover:bg-gray-200"
                         >
@@ -748,14 +841,25 @@ export default function OrderDetailPage() {
                   </div>
                 </div>
                 <div>
-                  <a
-                    href={`https://www.etsy.com/your/orders/sold?order_id=${order.external_order_id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm text-blue-600 hover:text-blue-700"
-                  >
-                    View on Etsy →
-                  </a>
+                  {order.platform === "shopify" ? (
+                    <a
+                      href={`https://${order.stores?.shop_domain}/admin/orders/${order.external_order_id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-blue-600 hover:text-blue-700"
+                    >
+                      View on Shopify →
+                    </a>
+                  ) : (
+                    <a
+                      href={`https://www.etsy.com/your/orders/sold?order_id=${order.external_order_id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-blue-600 hover:text-blue-700"
+                    >
+                      View on Etsy →
+                    </a>
+                  )}
                 </div>
               </div>
             </div>

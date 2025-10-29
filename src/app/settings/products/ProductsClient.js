@@ -26,6 +26,8 @@ export default function ProductsClient() {
   const [saveStatus, setSaveStatus] = useState(null);
   const [showUnconfiguredModal, setShowUnconfiguredModal] = useState(false);
   const [updatingStatuses, setUpdatingStatuses] = useState(false);
+  const [similarSkus, setSimilarSkus] = useState([]);
+  const [selectedSkus, setSelectedSkus] = useState(new Set());
 
   useEffect(() => {
     loadProducts();
@@ -59,10 +61,32 @@ export default function ProductsClient() {
     }
   }
 
+  function findSimilarSkus(targetSku) {
+    // Simple approach: match first 3 characters
+    // "LABUBU-SKZ-HYUNJIN" -> matches anything starting with "LAB"
+    // "TALKING-PLUSHIE-16" -> matches anything starting with "TAL"
+    // "PERSON-BODY-PILLOW-001-60" -> matches anything starting with "PER"
+    const prefix = targetSku.substring(0, 3).toUpperCase();
+
+    const similar = unconfiguredSkus.filter((item) =>
+      item.sku.toUpperCase().startsWith(prefix)
+    );
+
+    return similar;
+  }
+
   function openCreateModal(skuData = null) {
     setModalMode("create");
     setCurrentProduct(null);
+
+    // Find similar SKUs if we have skuData
     if (skuData) {
+      const similar = findSimilarSkus(skuData.sku);
+      setSimilarSkus(similar);
+
+      // Select all similar SKUs by default
+      setSelectedSkus(new Set(similar.map((s) => s.sku)));
+
       setFormData({
         sku: skuData.sku,
         product_name: skuData.product_name || "",
@@ -77,6 +101,9 @@ export default function ProductsClient() {
         canva_template_url: "",
       });
     } else {
+      setSimilarSkus([]);
+      setSelectedSkus(new Set());
+
       setFormData({
         sku: "",
         product_name: "",
@@ -116,42 +143,110 @@ export default function ProductsClient() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setSaveStatus({ type: "info", message: "Saving..." });
 
-    try {
-      const url =
-        modalMode === "create"
-          ? "/api/products"
-          : `/api/products/${currentProduct.id}`;
-      const method = modalMode === "create" ? "POST" : "PUT";
-
-      const response = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to save product");
-      }
-
+    // Check if we're doing bulk create for similar SKUs
+    if (modalMode === "create" && selectedSkus.size > 1) {
       setSaveStatus({
-        type: "success",
-        message: `Product ${
-          modalMode === "create" ? "created" : "updated"
-        } successfully!`,
+        type: "info",
+        message: `Saving ${selectedSkus.size} products...`,
       });
 
-      setTimeout(() => {
-        setShowModal(false);
-        setSaveStatus(null);
-        loadProducts();
-        loadUnconfiguredSkus();
-      }, 1500);
-    } catch (error) {
-      setSaveStatus({ type: "error", message: error.message });
+      try {
+        let successCount = 0;
+        let errorCount = 0;
+        const errors = [];
+
+        // Save each selected SKU
+        for (const sku of selectedSkus) {
+          try {
+            const skuItem = similarSkus.find((s) => s.sku === sku);
+            const skuFormData = {
+              ...formData,
+              sku: sku,
+              product_name: skuItem?.product_name || sku,
+            };
+
+            const response = await fetch("/api/products", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(skuFormData),
+            });
+
+            if (response.ok) {
+              successCount++;
+            } else {
+              const data = await response.json();
+              errorCount++;
+              errors.push(`${sku}: ${data.error}`);
+            }
+          } catch (err) {
+            errorCount++;
+            errors.push(`${sku}: ${err.message}`);
+          }
+        }
+
+        if (errorCount === 0) {
+          setSaveStatus({
+            type: "success",
+            message: `Successfully created ${successCount} products!`,
+          });
+        } else {
+          setSaveStatus({
+            type: "error",
+            message: `Created ${successCount} products, ${errorCount} failed. ${errors
+              .slice(0, 3)
+              .join(". ")}`,
+          });
+        }
+
+        setTimeout(() => {
+          setShowModal(false);
+          setSaveStatus(null);
+          loadProducts();
+          loadUnconfiguredSkus();
+        }, 2000);
+      } catch (error) {
+        setSaveStatus({ type: "error", message: error.message });
+      }
+    } else {
+      // Single product save (original logic)
+      setSaveStatus({ type: "info", message: "Saving..." });
+
+      try {
+        const url =
+          modalMode === "create"
+            ? "/api/products"
+            : `/api/products/${currentProduct.id}`;
+        const method = modalMode === "create" ? "POST" : "PUT";
+
+        const response = await fetch(url, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(formData),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || "Failed to save product");
+        }
+
+        setSaveStatus({
+          type: "success",
+          message: `Product ${
+            modalMode === "create" ? "created" : "updated"
+          } successfully!`,
+        });
+
+        setTimeout(() => {
+          setShowModal(false);
+          setSaveStatus(null);
+          loadProducts();
+          loadUnconfiguredSkus();
+        }, 1500);
+      } catch (error) {
+        setSaveStatus({ type: "error", message: error.message });
+      }
     }
   }
 
@@ -258,40 +353,6 @@ export default function ProductsClient() {
             </p>
           </div>
           <div className="flex gap-3">
-            <button
-              onClick={handleUpdateStatuses}
-              disabled={updatingStatuses}
-              className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-              title="Update existing order statuses based on product configurations"
-            >
-              {updatingStatuses ? (
-                <>
-                  <svg
-                    className="animate-spin h-4 w-4 text-white"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    ></circle>
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    ></path>
-                  </svg>
-                  Updating...
-                </>
-              ) : (
-                <>🔄 Retroactively Update Order Statuses</>
-              )}
-            </button>
             <button
               onClick={() => openCreateModal()}
               className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
@@ -531,7 +592,11 @@ export default function ProductsClient() {
                     type="submit"
                     className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
                   >
-                    {modalMode === "create" ? "Create Product" : "Save Changes"}
+                    {modalMode === "create"
+                      ? selectedSkus.size > 1
+                        ? `Create ${selectedSkus.size} Products`
+                        : "Create Product"
+                      : "Save Changes"}
                   </button>
                 </div>
               </div>
@@ -548,6 +613,66 @@ export default function ProductsClient() {
                     }`}
                   >
                     {saveStatus.message}
+                  </div>
+                )}
+
+                {/* Similar SKUs Selection */}
+                {modalMode === "create" && similarSkus.length > 1 && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="font-medium text-gray-900">
+                        Bulk Configure Similar SKUs ({selectedSkus.size}{" "}
+                        selected)
+                      </h3>
+                      <div className="text-sm text-gray-600">
+                        Click to deselect SKUs that don't apply
+                      </div>
+                    </div>
+                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                      {similarSkus.map((skuItem) => (
+                        <label
+                          key={skuItem.sku}
+                          className={`flex items-center gap-3 p-3 rounded cursor-pointer transition-colors ${
+                            selectedSkus.has(skuItem.sku)
+                              ? "bg-white border-2 border-blue-500"
+                              : "bg-gray-50 border-2 border-transparent hover:bg-gray-100"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedSkus.has(skuItem.sku)}
+                            onChange={(e) => {
+                              const newSelected = new Set(selectedSkus);
+                              if (e.target.checked) {
+                                newSelected.add(skuItem.sku);
+                              } else {
+                                newSelected.delete(skuItem.sku);
+                              }
+                              setSelectedSkus(newSelected);
+                            }}
+                            className="w-4 h-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                          />
+                          <div className="flex-1">
+                            <div className="font-medium text-gray-900">
+                              {skuItem.sku}
+                            </div>
+                            {skuItem.product_name && (
+                              <div className="text-xs text-gray-600">
+                                {skuItem.product_name}
+                              </div>
+                            )}
+                          </div>
+                          {!selectedSkus.has(skuItem.sku) && (
+                            <span className="text-xs text-gray-500">
+                              Deselected
+                            </span>
+                          )}
+                        </label>
+                      ))}
+                    </div>
+                    <div className="mt-3 text-xs text-gray-600">
+                      💡 All selected SKUs will receive the same configuration
+                    </div>
                   </div>
                 )}
 

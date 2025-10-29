@@ -578,7 +578,13 @@ export default function ProductionPage() {
 
     if (!numerals || numerals.length === 0) return baseSku;
 
-    return `${baseSku}-${numerals.join("-")}`;
+    // Check if dimensions are already in the SKU to avoid duplication
+    const dimensionSuffix = numerals.join("-");
+    if (baseSku.endsWith(`-${dimensionSuffix}`)) {
+      return baseSku; // Already has dimensions, don't append again
+    }
+
+    return `${baseSku}-${dimensionSuffix}`;
   }
 
   function getStatusColor(status) {
@@ -1405,14 +1411,25 @@ export default function ProductionPage() {
                         <h3 className="text-sm font-semibold text-gray-900">
                           Order #{order.order_number}
                         </h3>
-                        <a
-                          href={`https://www.etsy.com/your/orders/sold?order_id=${order.order_number}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-500 text-white text-xs font-medium rounded hover:bg-orange-600 transition-colors"
-                        >
-                          Etsy ↗
-                        </a>
+                        {order.platform === "shopify" ? (
+                          <a
+                            href={`https://${order.stores?.shop_domain}/admin/orders/${order.external_order_id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-500 text-white text-xs font-medium rounded hover:bg-green-600 transition-colors"
+                          >
+                            Shopify ↗
+                          </a>
+                        ) : (
+                          <a
+                            href={`https://www.etsy.com/your/orders/sold?order_id=${order.order_number}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-500 text-white text-xs font-medium rounded hover:bg-orange-600 transition-colors"
+                          >
+                            Etsy ↗
+                          </a>
+                        )}
                         <span className="text-xs text-gray-600">
                           {order.customer_name}
                         </span>
@@ -2030,14 +2047,25 @@ export default function ProductionPage() {
                       </div>
                     </div>
                     <div>
-                      <a
-                        href={`https://www.etsy.com/your/orders/sold?order_id=${scannedOrder.external_order_id}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 px-3 py-2 bg-orange-500 text-white text-sm font-medium rounded hover:bg-orange-600 transition-colors"
-                      >
-                        View on Etsy ↗
-                      </a>
+                      {scannedOrder.platform === "shopify" ? (
+                        <a
+                          href={`https://${scannedOrder.stores?.shop_domain}/admin/orders/${scannedOrder.external_order_id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 px-3 py-2 bg-green-500 text-white text-sm font-medium rounded hover:bg-green-600 transition-colors"
+                        >
+                          View on Shopify ↗
+                        </a>
+                      ) : (
+                        <a
+                          href={`https://www.etsy.com/your/orders/sold?order_id=${scannedOrder.external_order_id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 px-3 py-2 bg-orange-500 text-white text-sm font-medium rounded hover:bg-orange-600 transition-colors"
+                        >
+                          View on Etsy ↗
+                        </a>
+                      )}
                     </div>
                   </div>
                 </div>

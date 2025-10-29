@@ -384,14 +384,25 @@ export default function DesignQueuePage() {
                         <h3 className="text-base font-semibold text-gray-900">
                           Order #{order.order_number}
                         </h3>
-                        <a
-                          href={`https://www.etsy.com/your/orders/sold?order_id=${order.order_number}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-500 text-white text-xs font-medium rounded hover:bg-orange-600 transition-colors"
-                        >
-                          Etsy ↗
-                        </a>
+                        {order.platform === "shopify" ? (
+                          <a
+                            href={`https://${order.stores?.shop_domain}/admin/orders/${order.external_order_id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-500 text-white text-xs font-medium rounded hover:bg-green-600 transition-colors"
+                          >
+                            Shopify ↗
+                          </a>
+                        ) : (
+                          <a
+                            href={`https://www.etsy.com/your/orders/sold?order_id=${order.order_number}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-500 text-white text-xs font-medium rounded hover:bg-orange-600 transition-colors"
+                          >
+                            Etsy ↗
+                          </a>
+                        )}
                       </div>
                       <p className="text-xs text-gray-600 mt-0.5">
                         {order.customer_name} •{" "}

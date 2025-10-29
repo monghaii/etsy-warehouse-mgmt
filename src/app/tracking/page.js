@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import Navigation from "@/components/Navigation";
 import { supabaseAdmin } from "@/lib/supabase-server";
+import TrackingClient from "./TrackingClient";
 
 async function getUser() {
   const cookieStore = await cookies();
@@ -57,17 +58,7 @@ export default async function TrackingPage() {
             </p>
           </div>
 
-          <div className="bg-white shadow rounded-lg p-6">
-            <div className="text-center py-12">
-              <div className="text-6xl mb-4">📦</div>
-              <h3 className="text-lg font-medium text-gray-900 mb-2">
-                Coming Soon
-              </h3>
-              <p className="text-gray-500">
-                Will be implemented in the future.
-              </p>
-            </div>
-          </div>
+          <TrackingClient />
         </div>
       </main>
     </div>

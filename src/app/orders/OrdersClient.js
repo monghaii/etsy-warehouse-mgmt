@@ -95,20 +95,66 @@ export default function OrdersClient({ user }) {
       console.log("Sync response:", data);
 
       if (data.success) {
+        // Build detailed success message
+        let message = `✓ Auto-import complete! Total: ${data.total_imported} imported, ${data.total_skipped} skipped`;
+
+        // Add per-store breakdown if available
+        if (data.results && data.results.length > 0) {
+          const storeDetails = data.results
+            .map((r) => {
+              const platform =
+                r.platform ||
+                (r.store_name.includes("Shopify") ? "Shopify" : "Etsy");
+              return `\n  • ${r.store_name} (${platform}): ${r.imported} new, ${r.skipped} skipped`;
+            })
+            .join("");
+          message += storeDetails;
+        }
+
         setSyncStatus({
           type: "success",
-          message: `✓ Auto-import complete! Imported: ${data.total_imported}, Skipped: ${data.total_skipped}`,
+          message,
         });
         loadOrders();
         loadLastSyncTime();
-        // Auto-dismiss after 5 seconds
-        setTimeout(() => setSyncStatus(null), 5000);
+        // Auto-dismiss after 8 seconds (longer for detailed view)
+        setTimeout(() => setSyncStatus(null), 8000);
       } else {
-        // Error - don't auto-dismiss
+        // Build detailed error message
+        let errorMessage = "⚠ Sync completed with errors:\n";
+
+        if (data.results && data.results.length > 0) {
+          data.results.forEach((r) => {
+            const platform =
+              r.platform ||
+              (r.store_name.includes("Shopify") ? "Shopify" : "Etsy");
+            if (r.success === false) {
+              errorMessage += `\n  ✗ ${r.store_name} (${platform}): ${
+                r.error || "Unknown error"
+              }`;
+            } else if (r.imported > 0 || r.skipped > 0) {
+              errorMessage += `\n  ✓ ${r.store_name} (${platform}): ${r.imported} new, ${r.skipped} skipped`;
+            }
+          });
+        } else {
+          errorMessage = data.error || "Sync failed";
+        }
+
+        // Some orders may have been imported even with errors
+        if (data.total_imported > 0) {
+          errorMessage += `\n\nTotal imported: ${data.total_imported}`;
+        }
+
         setSyncStatus({
           type: "error",
-          message: data.error || "Sync failed",
+          message: errorMessage,
         });
+
+        // Still reload orders if some were imported
+        if (data.total_imported > 0) {
+          loadOrders();
+          loadLastSyncTime();
+        }
       }
     } catch (error) {
       console.error("Sync error:", error);
@@ -127,43 +173,102 @@ export default function OrdersClient({ user }) {
 
     try {
       setUploading(true);
-      setSyncStatus({
-        type: "info",
-        message: `📄 Processing ${files.length} PDF file(s)...`,
-      });
 
-      const formData = new FormData();
+      // Separate PDFs and CSVs
+      const pdfFiles = [];
+      const csvFiles = [];
+
       for (let i = 0; i < files.length; i++) {
-        formData.append("pdfs", files[i]);
+        const file = files[i];
+        if (file.name.toLowerCase().endsWith(".csv")) {
+          csvFiles.push(file);
+        } else if (file.name.toLowerCase().endsWith(".pdf")) {
+          pdfFiles.push(file);
+        }
       }
 
-      const response = await fetch("/api/orders/upload-pdfs", {
-        method: "POST",
-        body: formData,
+      const results = {
+        pdfUpdated: 0,
+        pdfFailed: 0,
+        csvUpdated: 0,
+        csvNotFound: 0,
+        csvErrors: 0,
+      };
+
+      // Process PDFs (Etsy receipts)
+      if (pdfFiles.length > 0) {
+        setSyncStatus({
+          type: "info",
+          message: `📄 Processing ${pdfFiles.length} Etsy PDF file(s)...`,
+        });
+
+        const pdfFormData = new FormData();
+        for (const file of pdfFiles) {
+          pdfFormData.append("pdfs", file);
+        }
+
+        const pdfResponse = await fetch("/api/orders/upload-pdfs", {
+          method: "POST",
+          body: pdfFormData,
+        });
+
+        const pdfData = await pdfResponse.json();
+        if (pdfData.success) {
+          results.pdfUpdated = pdfData.updated || 0;
+          results.pdfFailed = pdfData.failed || 0;
+        }
+      }
+
+      // Process CSVs (Shopify exports)
+      if (csvFiles.length > 0) {
+        setSyncStatus({
+          type: "info",
+          message: `📊 Processing ${csvFiles.length} Shopify CSV file(s)...`,
+        });
+
+        for (const file of csvFiles) {
+          const csvFormData = new FormData();
+          csvFormData.append("file", file);
+
+          const csvResponse = await fetch("/api/shopify/import-csv", {
+            method: "POST",
+            body: csvFormData,
+          });
+
+          const csvData = await csvResponse.json();
+          if (csvData.success) {
+            results.csvUpdated += csvData.updated || 0;
+            results.csvNotFound += csvData.notFound || 0;
+            results.csvErrors += csvData.errors?.length || 0;
+          }
+        }
+      }
+
+      // Build success message
+      const messages = [];
+      if (pdfFiles.length > 0) {
+        messages.push(
+          `Etsy PDFs: ${results.pdfUpdated} updated, ${results.pdfFailed} failed`
+        );
+      }
+      if (csvFiles.length > 0) {
+        messages.push(
+          `Shopify CSVs: ${results.csvUpdated} updated, ${results.csvNotFound} not found`
+        );
+      }
+
+      setSyncStatus({
+        type: "success",
+        message: `✓ Processing complete!\n${messages.join("\n")}`,
       });
 
-      const data = await response.json();
-
-      if (data.success) {
-        setSyncStatus({
-          type: "success",
-          message: `✓ PDF processing complete! Updated: ${
-            data.updated
-          }, Failed: ${data.failed || 0}`,
-        });
-        // Reload orders to show updated information
-        loadOrders();
-        setTimeout(() => setSyncStatus(null), 8000);
-      } else {
-        setSyncStatus({
-          type: "error",
-          message: `PDF processing failed: ${data.error}`,
-        });
-      }
+      // Reload orders to show updated information
+      loadOrders();
+      setTimeout(() => setSyncStatus(null), 10000);
     } catch (error) {
       setSyncStatus({
         type: "error",
-        message: `PDF upload failed: ${error.message}`,
+        message: `File upload failed: ${error.message}`,
       });
     } finally {
       setUploading(false);
@@ -400,7 +505,13 @@ export default function OrdersClient({ user }) {
 
     if (!numerals || numerals.length === 0) return baseSku;
 
-    return `${baseSku}-${numerals.join("-")}`;
+    // Check if dimensions are already in the SKU to avoid duplication
+    const dimensionSuffix = numerals.join("-");
+    if (baseSku.endsWith(`-${dimensionSuffix}`)) {
+      return baseSku; // Already has dimensions, don't append again
+    }
+
+    return `${baseSku}-${dimensionSuffix}`;
   }
 
   function renderSKU(enhancedSku, originalSku = null) {
@@ -518,11 +629,11 @@ export default function OrdersClient({ user }) {
               className={`px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors flex items-center gap-2 cursor-pointer ${
                 uploading ? "opacity-50 cursor-not-allowed" : ""
               }`}
-              title="Upload PDFs to fill in detailed customer info including addresses. Export PDFs from your Etsy Orders page."
+              title="Upload Etsy receipt PDFs or Shopify order export CSVs to fill in detailed customer info including addresses and emails."
             >
               <input
                 type="file"
-                accept=".pdf"
+                accept=".pdf,.csv"
                 multiple
                 onChange={handlePDFUpload}
                 disabled={uploading}
@@ -553,7 +664,7 @@ export default function OrdersClient({ user }) {
                   Processing...
                 </>
               ) : (
-                <>📄 Upload PDFs</>
+                <>📄 Upload Etsy PDFs/Shopify CSVs</>
               )}
             </label>
             <span className="text-xs text-gray-500">
@@ -587,11 +698,13 @@ export default function OrdersClient({ user }) {
               : "bg-red-50 border-red-200 text-red-800"
           }`}
         >
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium">{syncStatus.message}</span>
+          <div className="flex items-start justify-between gap-4">
+            <pre className="text-sm font-medium whitespace-pre-wrap font-sans flex-1">
+              {syncStatus.message}
+            </pre>
             <button
               onClick={() => setSyncStatus(null)}
-              className="text-sm hover:opacity-70"
+              className="text-sm hover:opacity-70 flex-shrink-0 mt-0.5"
             >
               ✕
             </button>
@@ -812,9 +925,12 @@ export default function OrdersClient({ user }) {
                       </td>
                       <td
                         className="px-3 py-2 whitespace-nowrap"
-                        title={order.stores?.store_name || "—"}
+                        title={`${order.stores?.store_name || "—"} (${
+                          order.platform === "shopify" ? "Shopify" : "Etsy"
+                        })`}
                       >
                         <div className="text-xs text-gray-900">
+                          {order.platform === "shopify" ? "🛒 " : "🛍️ "}
                           {order.stores?.store_name || "—"}
                         </div>
                       </td>
@@ -1005,15 +1121,27 @@ export default function OrdersClient({ user }) {
                             View
                           </Link>
                           <span className="text-gray-300">|</span>
-                          <a
-                            href={`https://www.etsy.com/your/orders/sold?order_id=${order.external_order_id}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="px-2 py-1 bg-orange-100 text-orange-700 hover:bg-orange-200 rounded font-medium"
-                            title="View on Etsy"
-                          >
-                            Etsy ↗
-                          </a>
+                          {order.platform === "shopify" ? (
+                            <a
+                              href={`https://${order.stores?.shop_domain}/admin/orders/${order.external_order_id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-2 py-1 bg-green-100 text-green-700 hover:bg-green-200 rounded font-medium"
+                              title="View on Shopify"
+                            >
+                              Shopify ↗
+                            </a>
+                          ) : (
+                            <a
+                              href={`https://www.etsy.com/your/orders/sold?order_id=${order.external_order_id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-2 py-1 bg-orange-100 text-orange-700 hover:bg-orange-200 rounded font-medium"
+                              title="View on Etsy"
+                            >
+                              Etsy ↗
+                            </a>
+                          )}
                         </div>
                       </td>
                     </tr>
