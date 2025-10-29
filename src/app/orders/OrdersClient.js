@@ -23,6 +23,8 @@ export default function OrdersClient({ user }) {
   const [page, setPage] = useState(1);
   const [limit] = useState(50);
   const [totalPages, setTotalPages] = useState(1);
+  const [bulkStatus, setBulkStatus] = useState("");
+  const [updatingBulkStatus, setUpdatingBulkStatus] = useState(false);
 
   useEffect(() => {
     loadOrders();
@@ -195,6 +197,65 @@ export default function OrdersClient({ user }) {
         type: "error",
         message: "Failed to update status. Please try again.",
       });
+    }
+  }
+
+  async function handleBulkStatusChange() {
+    if (!bulkStatus || selectedOrders.size === 0) return;
+
+    try {
+      setUpdatingBulkStatus(true);
+      setSyncStatus({
+        type: "info",
+        message: `Updating ${selectedOrders.size} order(s)...`,
+      });
+
+      const orderIds = Array.from(selectedOrders);
+      let successCount = 0;
+      let failCount = 0;
+
+      for (const orderId of orderIds) {
+        try {
+          const response = await fetch(`/api/orders/${orderId}/status`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: bulkStatus }),
+          });
+
+          if (response.ok) {
+            successCount++;
+            // Update local state
+            setOrders((prevOrders) =>
+              prevOrders.map((order) =>
+                order.id === orderId ? { ...order, status: bulkStatus } : order
+              )
+            );
+          } else {
+            failCount++;
+          }
+        } catch (error) {
+          failCount++;
+        }
+      }
+
+      setSyncStatus({
+        type: successCount > 0 ? "success" : "error",
+        message: `✓ Updated ${successCount} order(s)${
+          failCount > 0 ? `, ${failCount} failed` : ""
+        }`,
+      });
+
+      setSelectedOrders(new Set());
+      setBulkStatus("");
+      setTimeout(() => setSyncStatus(null), 5000);
+    } catch (error) {
+      console.error("Failed to bulk update status:", error);
+      setSyncStatus({
+        type: "error",
+        message: "Failed to update orders. Please try again.",
+      });
+    } finally {
+      setUpdatingBulkStatus(false);
     }
   }
 
@@ -575,6 +636,58 @@ export default function OrdersClient({ user }) {
         </div>
       </div>
 
+      {/* Bulk Actions Bar */}
+      {selectedOrders.size > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-gray-900">
+                {selectedOrders.size} order
+                {selectedOrders.size !== 1 ? "s" : ""} selected
+              </span>
+              <button
+                onClick={() => setSelectedOrders(new Set())}
+                className="text-xs text-gray-600 hover:text-gray-900 underline"
+              >
+                Clear
+              </button>
+            </div>
+            <div className="flex items-center gap-2 flex-1">
+              <label className="text-sm font-medium text-gray-900">
+                Change status to:
+              </label>
+              <select
+                value={bulkStatus}
+                onChange={(e) => setBulkStatus(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="">Select status...</option>
+                <option value="pending_enrichment">Pending Enrichment</option>
+                <option value="needs_review">Needs Review</option>
+                <option value="ready_for_design">Ready for Design</option>
+                <option value="design_complete">Design Complete</option>
+                <option value="in_production">In Production</option>
+                <option value="labels_generated">Labels Generated</option>
+                <option value="loaded_for_shipment">Loaded for Shipment</option>
+                <option value="in_transit">In Transit</option>
+                <option value="delivered">Delivered</option>
+              </select>
+              <button
+                onClick={handleBulkStatusChange}
+                disabled={!bulkStatus || updatingBulkStatus}
+                className={`px-4 py-2 rounded font-medium text-sm transition-colors ${
+                  !bulkStatus || updatingBulkStatus
+                    ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                    : "bg-blue-600 text-white hover:bg-blue-700"
+                }`}
+              >
+                {updatingBulkStatus ? "Updating..." : "Update Status"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Orders Table */}
       <div className="bg-white rounded-lg border border-gray-300 overflow-hidden">
         {loading ? (
@@ -717,14 +830,12 @@ export default function OrdersClient({ user }) {
                       </td>
                       <td
                         className="px-3 py-2 max-w-[120px] relative"
-                        onMouseEnter={() =>
-                          hasMultipleItems && setHoveredOrder(order.id)
-                        }
+                        onMouseEnter={() => setHoveredOrder(order.id)}
                         onMouseLeave={() => setHoveredOrder(null)}
                       >
                         {hasMultipleItems ? (
                           <>
-                            <div className="text-xs text-gray-900 font-medium">
+                            <div className="text-xs text-gray-900 font-medium cursor-help">
                               {transactions.length} Items
                             </div>
                             {hoveredOrder === order.id && (
@@ -759,17 +870,56 @@ export default function OrdersClient({ user }) {
                             )}
                           </>
                         ) : (
-                          <div
-                            className="text-xs text-gray-900 truncate"
-                            title={`${order.product_sku}\n${
-                              order.product_name || ""
-                            }`}
-                          >
-                            {renderSKU(
-                              order.product_sku,
-                              order.raw_order_data?.transactions?.[0]?.sku
+                          <>
+                            <div className="text-xs text-gray-900 truncate cursor-help">
+                              {renderSKU(
+                                order.product_sku,
+                                order.raw_order_data?.transactions?.[0]?.sku
+                              )}
+                            </div>
+                            {hoveredOrder === order.id && (
+                              <div className="absolute z-50 left-0 top-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg p-3 min-w-[300px]">
+                                <div className="text-xs font-semibold text-gray-900 mb-2">
+                                  Product Details:
+                                </div>
+                                <div className="text-xs">
+                                  <div className="font-medium text-gray-900 mb-1">
+                                    {order.product_name ||
+                                      order.raw_order_data?.transactions?.[0]
+                                        ?.title ||
+                                      "Unknown Product"}
+                                  </div>
+                                  <div className="text-gray-600">
+                                    SKU:{" "}
+                                    {renderSKU(
+                                      order.product_sku,
+                                      order.raw_order_data?.transactions?.[0]
+                                        ?.sku
+                                    )}
+                                  </div>
+                                  <div className="text-gray-600">
+                                    Qty:{" "}
+                                    {order.raw_order_data?.transactions?.[0]
+                                      ?.quantity || 1}
+                                  </div>
+                                  {order.raw_order_data?.transactions?.[0]
+                                    ?.price && (
+                                    <div className="text-gray-600 mt-1">
+                                      Price: $
+                                      {(
+                                        parseFloat(
+                                          order.raw_order_data.transactions[0]
+                                            .price.amount
+                                        ) /
+                                        order.raw_order_data.transactions[0]
+                                          .price.divisor
+                                      ).toFixed(2)}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
                             )}
-                          </div>
+                          </>
                         )}
                       </td>
                       <td
@@ -782,70 +932,39 @@ export default function OrdersClient({ user }) {
                       </td>
                       <td
                         className="px-3 py-2 whitespace-nowrap"
-                        title={order.status.replace(/_/g, " ")}
+                        onClick={(e) => e.stopPropagation()}
                       >
-                        {editingStatus?.orderId === order.id ? (
-                          <select
-                            value={editingStatus.status}
-                            onChange={(e) => {
-                              handleStatusChange(order.id, e.target.value);
-                            }}
-                            onBlur={() => setEditingStatus(null)}
-                            autoFocus
-                            className={`px-2 py-0.5 text-xs font-semibold rounded cursor-pointer focus:ring-2 focus:ring-blue-500 focus:outline-none ${getStatusColor(
-                              editingStatus.status
-                            )}`}
-                          >
-                            <option value="pending_enrichment">
-                              Pending Enrichment
-                            </option>
-                            <option value="needs_review">Needs Review</option>
-                            <option value="ready_for_design">
-                              Ready for Design
-                            </option>
-                            <option value="design_complete">
-                              Design Complete
-                            </option>
-                            <option value="labels_generated">
-                              Labels Generated
-                            </option>
-                            <option value="loaded_for_shipment">
-                              Loaded for Shipment
-                            </option>
-                            <option value="in_transit">In Transit</option>
-                            <option value="delivered">Delivered</option>
-                          </select>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={`px-2 py-0.5 text-xs font-semibold rounded ${getStatusColor(
-                                order.status
-                              )}`}
-                            >
-                              {order.status.replace(/_/g, " ")}
-                            </span>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEditingStatus({
-                                  orderId: order.id,
-                                  status: order.status,
-                                });
-                              }}
-                              className="text-gray-400 hover:text-gray-600 transition-colors"
-                              title="Edit status"
-                            >
-                              <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                className="h-4 w-4"
-                                viewBox="0 0 20 20"
-                                fill="currentColor"
-                              >
-                                <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-                              </svg>
-                            </button>
-                          </div>
-                        )}
+                        <select
+                          value={order.status}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            handleStatusChange(order.id, e.target.value);
+                          }}
+                          className={`px-2 py-1 text-xs font-semibold rounded cursor-pointer focus:ring-2 focus:ring-blue-500 focus:outline-none border-0 ${getStatusColor(
+                            order.status
+                          )}`}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <option value="pending_enrichment">
+                            Pending Enrichment
+                          </option>
+                          <option value="needs_review">Needs Review</option>
+                          <option value="ready_for_design">
+                            Ready for Design
+                          </option>
+                          <option value="design_complete">
+                            Design Complete
+                          </option>
+                          <option value="in_production">In Production</option>
+                          <option value="labels_generated">
+                            Labels Generated
+                          </option>
+                          <option value="loaded_for_shipment">
+                            Loaded for Shipment
+                          </option>
+                          <option value="in_transit">In Transit</option>
+                          <option value="delivered">Delivered</option>
+                        </select>
                       </td>
                       <td
                         className="px-3 py-2 whitespace-nowrap text-xs text-gray-500"

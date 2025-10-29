@@ -442,33 +442,59 @@ export default function ProductionPage() {
     e.preventDefault();
     if (!barcode.trim()) return;
 
-    try {
-      // Try to find the order by order_number (barcode)
-      const order = orders.find(
-        (o) => o.order_number?.toString() === barcode.trim()
-      );
+    const scannedValue = barcode.trim();
 
-      if (order) {
-        // Fetch full order details
-        const response = await fetch(`/api/orders/${order.id}`);
-        const data = await response.json();
-        setScannedOrder(data.order);
-        setScanningMode(false);
-        setBarcode("");
+    try {
+      let order = null;
+
+      // Detect if it's a tracking number (20+ digits) or order number
+      const isTrackingNumber =
+        scannedValue.length >= 20 && /^\d+$/.test(scannedValue);
+
+      if (isTrackingNumber) {
+        // Search by tracking number
+        order = orders.find((o) => o.tracking_number === scannedValue);
+
+        if (!order) {
+          setActionStatus({
+            type: "error",
+            message: `No order found with tracking number: ${scannedValue}`,
+          });
+          setBarcode("");
+          return;
+        }
       } else {
-        setActionStatus({
-          type: "error",
-          message: `Order #${barcode} not found in production queue`,
-        });
-        setTimeout(() => setActionStatus(null), 3000);
-        setBarcode("");
-        barcodeInputRef.current?.focus();
+        // Search by order number
+        order = orders.find((o) => o.order_number?.toString() === scannedValue);
+
+        if (!order) {
+          setActionStatus({
+            type: "error",
+            message: `No order found with order number: ${scannedValue}`,
+          });
+          setBarcode("");
+          return;
+        }
       }
+
+      // Fetch full order details
+      const response = await fetch(`/api/orders/${order.id}`);
+      const data = await response.json();
+      setScannedOrder(data.order);
+      setScanningMode(false);
+      setBarcode("");
+      setActionStatus({
+        type: "success",
+        message: `✓ Found order #${order.order_number}${
+          isTrackingNumber ? " by tracking number" : ""
+        }`,
+      });
+      setTimeout(() => setActionStatus(null), 3000);
     } catch (error) {
       console.error("Failed to load order:", error);
       setActionStatus({
         type: "error",
-        message: "Failed to load order. Please try again.",
+        message: "Failed to load order details. Please try again.",
       });
       setTimeout(() => setActionStatus(null), 3000);
       setBarcode("");

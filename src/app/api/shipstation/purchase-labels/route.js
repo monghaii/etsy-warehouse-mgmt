@@ -255,6 +255,64 @@ export async function POST(request) {
           continue;
         }
 
+        // Send tracking number back to Etsy
+        try {
+          console.log(
+            `[Label Purchase] Sending tracking to Etsy for order ${order.order_number}`
+          );
+
+          // Get store info with Etsy credentials
+          const { data: store } = await supabaseAdmin
+            .from("stores")
+            .select("*")
+            .eq("id", order.store_id)
+            .single();
+
+          if (store && store.access_token && order.external_order_id) {
+            // Etsy API: Submit shipment tracking
+            // https://developers.etsy.com/documentation/reference/#operation/createShopReceipt_shipment
+            const etsyResponse = await fetch(
+              `https://openapi.etsy.com/v3/application/shops/${store.shop_id}/receipts/${order.external_order_id}/tracking`,
+              {
+                method: "POST",
+                headers: {
+                  "x-api-key": process.env.ETSY_API_KEY,
+                  Authorization: `Bearer ${store.access_token}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  tracking_code: labelData.tracking_number,
+                  carrier_name: rate.carrierNickname || "USPS",
+                  send_bcc: false, // Don't send blind copy to seller
+                }),
+              }
+            );
+
+            if (etsyResponse.ok) {
+              console.log(
+                `[Label Purchase] ✓ Tracking sent to Etsy for order ${order.order_number}`
+              );
+            } else {
+              const etsyError = await etsyResponse.json();
+              console.error(
+                `[Label Purchase] Failed to send tracking to Etsy for order ${order.order_number}:`,
+                etsyError
+              );
+              // Don't fail the whole operation if Etsy callback fails
+            }
+          } else {
+            console.warn(
+              `[Label Purchase] Skipping Etsy callback for order ${order.order_number} - missing store credentials or external order ID`
+            );
+          }
+        } catch (etsyError) {
+          console.error(
+            `[Label Purchase] Etsy callback error for order ${order.order_number}:`,
+            etsyError
+          );
+          // Don't fail the whole operation if Etsy callback fails
+        }
+
         results.push({
           orderId: order.id,
           orderNumber: order.order_number,

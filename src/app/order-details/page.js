@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 
-export default function OrderDetailsForm() {
+function OrderDetailsForm() {
   const searchParams = useSearchParams();
   const [step, setStep] = useState(1); // 1: lookup, 2: form, 3: success
   const [orderNumber, setOrderNumber] = useState("");
@@ -546,5 +546,19 @@ export default function OrderDetailsForm() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function OrderDetailsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12 px-4 sm:px-6 lg:px-8 flex items-center justify-center">
+          <div className="text-gray-600">Loading...</div>
+        </div>
+      }
+    >
+      <OrderDetailsForm />
+    </Suspense>
   );
 }
