@@ -52,10 +52,12 @@ function OrderDetailsForm() {
     setLookupLoading(true);
 
     try {
+      // Use relative URL - works in both dev and production
       const response = await fetch("/api/enrich/lookup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ orderNumber }),
+        credentials: "same-origin", // Ensure cookies are sent
       });
 
       const data = await response.json();
@@ -120,6 +122,7 @@ function OrderDetailsForm() {
       const response = await fetch("/api/enrich/submit", {
         method: "POST",
         body: formData,
+        credentials: "same-origin", // Ensure cookies are sent
       });
 
       const data = await response.json();
@@ -195,7 +198,7 @@ function OrderDetailsForm() {
                   Order Number
                 </label>
                 <p className="text-sm text-gray-500 mb-3">
-                  You can find this on your Etsy receipt or order confirmation
+                  You can find this on your order receipt or order confirmation
                   email
                 </p>
                 <input
@@ -297,7 +300,7 @@ function OrderDetailsForm() {
                         </p>
                         {item.existingPersonalization && (
                           <p className="text-sm text-gray-600 mt-1 bg-white p-2 rounded border border-gray-200">
-                            From Etsy:{" "}
+                            From Order:{" "}
                             {decodeHtmlEntities(item.existingPersonalization)}
                           </p>
                         )}

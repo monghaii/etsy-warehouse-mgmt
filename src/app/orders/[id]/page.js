@@ -351,13 +351,33 @@ export default function OrderDetailPage() {
                   </div>
                 </div>
                 <div>
-                  <div className="text-sm text-gray-500">Buyer Email</div>
+                  <div className="text-sm text-gray-500">
+                    Buyer Email (From Marketplace)
+                  </div>
                   <div className="text-gray-900">
                     {order.customer_email ||
                       order.raw_order_data?.receipt?.buyer_email ||
                       "—"}
                   </div>
                 </div>
+                {order.enrichment_email && (
+                  <div>
+                    <div className="text-sm text-gray-500">
+                      Contact Email{" "}
+                      <span className="text-blue-600 text-xs">
+                        (via enrichment form)
+                      </span>
+                    </div>
+                    <div className="text-gray-900">
+                      <a
+                        href={`mailto:${order.enrichment_email}`}
+                        className="text-blue-600 hover:underline"
+                      >
+                        {order.enrichment_email}
+                      </a>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 

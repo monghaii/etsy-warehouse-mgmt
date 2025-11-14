@@ -38,7 +38,7 @@ export async function POST(request) {
     // Look up order
     const { data: order, error: orderError } = await supabaseAdmin
       .from("orders")
-      .select("id, order_number, product_sku, status, raw_order_data")
+      .select("id, order_number, product_sku, status, platform, raw_order_data")
       .eq("id", orderId)
       .single();
 
@@ -53,6 +53,8 @@ export async function POST(request) {
         { status: 400 }
       );
     }
+
+    console.log("[Enrich Submit] Order platform:", order.platform);
 
     // Process enrichment data for each item
     const enrichedItems = [];

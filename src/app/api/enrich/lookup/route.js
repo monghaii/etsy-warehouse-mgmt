@@ -27,6 +27,7 @@ export async function POST(request) {
         customer_name,
         product_sku,
         status,
+        platform,
         enrichment_submitted_at,
         raw_order_data
       `
@@ -57,25 +58,63 @@ export async function POST(request) {
       );
     }
 
-    // Get all transactions (line items) from the order
-    const transactions = order.raw_order_data?.transactions || [];
+    // Get line items based on platform
+    let lineItems = [];
+    
+    if (order.platform === "etsy") {
+      // Etsy: raw_order_data.transactions
+      lineItems = order.raw_order_data?.transactions || [];
+    } else if (order.platform === "shopify") {
+      // Shopify: raw_order_data.line_items
+      lineItems = order.raw_order_data?.line_items || [];
+    } else {
+      // Unknown platform, try both
+      lineItems = order.raw_order_data?.transactions || order.raw_order_data?.line_items || [];
+    }
 
-    if (transactions.length === 0) {
+    if (lineItems.length === 0) {
       return NextResponse.json(
         { error: "No items found in this order." },
         { status: 400 }
       );
     }
 
-    console.log(`[Enrich Lookup] Order has ${transactions.length} item(s)`);
+    console.log(`[Enrich Lookup] Order has ${lineItems.length} item(s) (platform: ${order.platform})`);
 
     // Look up product configuration for each item
     const items = [];
     let allNoEnrichment = true;
 
-    for (const transaction of transactions) {
-      // SKU is already enhanced when the order was synced, so use it directly
-      const sku = transaction.sku || "";
+    for (const lineItem of lineItems) {
+      // Get SKU and item ID based on platform
+      let sku = "";
+      let itemId = "";
+      let productName = "";
+      let quantity = 1;
+      let existingPersonalization = null;
+
+      if (order.platform === "etsy") {
+        // Etsy structure
+        sku = lineItem.sku || "";
+        itemId = lineItem.transaction_id;
+        productName = lineItem.title || "Unknown Product";
+        quantity = lineItem.quantity || 1;
+        existingPersonalization = lineItem.variations
+          ?.map((v) => `${v.formatted_name}: ${v.formatted_value}`)
+          .join(" | ") || null;
+      } else if (order.platform === "shopify") {
+        // Shopify structure
+        sku = lineItem.sku || "";
+        itemId = lineItem.id?.toString() || lineItem.variant_id?.toString();
+        productName = lineItem.name || lineItem.title || "Unknown Product";
+        quantity = lineItem.quantity || 1;
+        // Shopify uses properties for personalization
+        if (lineItem.properties && lineItem.properties.length > 0) {
+          existingPersonalization = lineItem.properties
+            .map((p) => `${p.name}: ${p.value}`)
+            .join(" | ");
+        }
+      }
 
       const { data: product, error: productError } = await supabaseAdmin
         .from("product_templates")
@@ -86,16 +125,13 @@ export async function POST(request) {
         .single();
 
       const itemConfig = {
-        transactionId: transaction.transaction_id,
+        transactionId: itemId,
         sku: sku,
-        productName: transaction.title || "Unknown Product",
-        quantity: transaction.quantity || 1,
+        productName: productName,
+        quantity: quantity,
         personalizationType: product?.personalization_type || "both",
         personalizationInstructions: product?.personalization_notes || null,
-        existingPersonalization:
-          transaction.variations
-            ?.map((v) => `${v.formatted_name}: ${v.formatted_value}`)
-            .join(" | ") || null,
+        existingPersonalization: existingPersonalization,
       };
 
       // Check if this item needs enrichment
